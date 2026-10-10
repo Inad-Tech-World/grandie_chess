@@ -1,0 +1,70 @@
+[package]
+name = "grandie-chess"
+version = "0.1.0"
+description = "Grandie Chess: a chess training app powered by Leela Chess Zero"
+authors = ["Grandie Chess contributors"]
+license = "GPL-3.0-or-later"
+edition = "2021"
+rust-version = "1.97"
+default-run = "grandie-chess"
+
+[lib]
+name = "grandie_chess_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.7", features = [] }
+
+[dependencies]
+tauri = { version = "2.12", features = [] }
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri-plugin-dialog = "2"
+tauri-plugin-window-state = "2"
+specta = "=2.0.0-rc.25"
+specta-typescript = "=0.0.12"
+tauri-specta = { version = "=2.0.0-rc.25", features = ["derive", "typescript"] }
+tokio = { version = "1", features = ["full"] }
+shakmaty = "0.30"
+pgn-reader = "0.29"
+thiserror = "2"
+log = "0.4"
+env_logger = "0.11"
+futures-util = "0.3"
+rayon = "1"
+zstd = "0.14"
+csv = "1"
+sha2 = "0.11"
+hex = "0.4"
+rand = "0.10"
+chrono = { version = "0.4", features = ["serde"] }
+reqwest = { version = "0.13", default-features = false, features = ["native-tls", "stream", "json", "gzip", "http2"] }
+rusqlite = { version = "0.40", features = ["bundled"] }
+r2d2 = "0.8"
+r2d2_sqlite = "0.35"
+
+# Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+panic = "abort"
+strip = true
+
+[dev-dependencies]
+tempfile = "3"
+
+[[bin]]
+name = "grandie-chess"
+path = "src/main.rs"
+
+# Scripted UCI engine used by tests (no GPU or network needed).
+[[bin]]
+name = "fake-uci"
+path = "src/bin/fake_uci.rs"
+
+# Plays engine-vs-engine matches to estimate the Elo of each opponent level.
+[[bin]]
+name = "calibrate"
+path = "src/bin/calibrate.rs"

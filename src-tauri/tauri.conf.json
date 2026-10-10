@@ -1,0 +1,52 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Grandie Chess",
+  "version": "0.1.0",
+  "identifier": "com.grandie.chess",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Grandie Chess",
+        "width": 1360,
+        "height": 880,
+        "minWidth": 980,
+        "minHeight": 660,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "dragDropEnabled": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["app", "dmg"],
+    "category": "public.app-category.board-games",
+    "shortDescription": "Chess training powered by Leela Chess Zero",
+    "longDescription": "Grandie Chess helps you improve: play Leela and human-like Maia opponents at your level, review your games, keep a database, and train openings and tactics.",
+    "copyright": "© 2026 Grandie Chess contributors. Licensed under GPL-3.0-or-later.",
+    "license": "GPL-3.0-or-later",
+    "externalBin": ["binaries/lc0"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "13.0",
+      "signingIdentity": "-",
+      "hardenedRuntime": true
+    }
+  }
+}

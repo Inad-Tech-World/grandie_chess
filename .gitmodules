@@ -1,0 +1,3 @@
+[submodule "engine/lc0"]
+	path = engine/lc0
+	url = https://github.com/LeelaChessZero/lc0.git

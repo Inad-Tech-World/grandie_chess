@@ -1,0 +1,139 @@
+{
+  "note": "Elo values are approximate (Lichess-like scale), from engine matches against Maia levels and Stockfish's UCI_Elo. Weak levels keep a constant temperature (TempDecayMoves 0) so they stay human-error-prone all game. Re-estimate with `cargo run --release --bin calibrate`.",
+  "maia": [
+    {
+      "id": "maia-1100",
+      "name": "Maia 1100",
+      "network": "maia-1100",
+      "elo": 1100
+    },
+    {
+      "id": "maia-1200",
+      "name": "Maia 1200",
+      "network": "maia-1200",
+      "elo": 1200
+    },
+    {
+      "id": "maia-1300",
+      "name": "Maia 1300",
+      "network": "maia-1300",
+      "elo": 1300
+    },
+    {
+      "id": "maia-1400",
+      "name": "Maia 1400",
+      "network": "maia-1400",
+      "elo": 1400
+    },
+    {
+      "id": "maia-1500",
+      "name": "Maia 1500",
+      "network": "maia-1500",
+      "elo": 1500
+    },
+    {
+      "id": "maia-1600",
+      "name": "Maia 1600",
+      "network": "maia-1600",
+      "elo": 1600
+    },
+    {
+      "id": "maia-1700",
+      "name": "Maia 1700",
+      "network": "maia-1700",
+      "elo": 1700
+    },
+    {
+      "id": "maia-1800",
+      "name": "Maia 1800",
+      "network": "maia-1800",
+      "elo": 1800
+    },
+    {
+      "id": "maia-1900",
+      "name": "Maia 1900",
+      "network": "maia-1900",
+      "elo": 1900
+    },
+    {
+      "id": "maia-2200",
+      "name": "Maia 2200",
+      "network": "maia-2200",
+      "elo": 2200
+    }
+  ],
+  "leela": [
+    {
+      "id": "leela-1",
+      "name": "Leela 1",
+      "network": "703810",
+      "nodes": 1,
+      "temperature": 2.2,
+      "tempDecayMoves": 0,
+      "elo": 800
+    },
+    {
+      "id": "leela-2",
+      "name": "Leela 2",
+      "network": "703810",
+      "nodes": 1,
+      "temperature": 1.5,
+      "tempDecayMoves": 0,
+      "elo": 1050
+    },
+    {
+      "id": "leela-3",
+      "name": "Leela 3",
+      "network": "703810",
+      "nodes": 1,
+      "temperature": 1.0,
+      "tempDecayMoves": 0,
+      "elo": 1300
+    },
+    {
+      "id": "leela-4",
+      "name": "Leela 4",
+      "network": "703810",
+      "nodes": 1,
+      "temperature": 0.65,
+      "tempDecayMoves": 0,
+      "elo": 1550
+    },
+    {
+      "id": "leela-5",
+      "name": "Leela 5",
+      "network": "703810",
+      "nodes": 1,
+      "temperature": 0.4,
+      "tempDecayMoves": 0,
+      "elo": 1800
+    },
+    {
+      "id": "leela-6",
+      "name": "Leela 6",
+      "network": "791556",
+      "nodes": 1,
+      "temperature": 0.25,
+      "tempDecayMoves": 0,
+      "elo": 2050
+    },
+    {
+      "id": "leela-7",
+      "name": "Leela 7",
+      "network": "791556",
+      "nodes": 8,
+      "temperature": 0.1,
+      "tempDecayMoves": 20,
+      "elo": 2300
+    },
+    {
+      "id": "leela-8",
+      "name": "Leela 8",
+      "network": "791556",
+      "nodes": 64,
+      "temperature": 0.0,
+      "tempDecayMoves": 0,
+      "elo": 2550
+    }
+  ]
+}

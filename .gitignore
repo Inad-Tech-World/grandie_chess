@@ -1,0 +1,29 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.sw?
+
+# Tests
+test-results/
+playwright-report/
+coverage/
+
+# Engine build tools and outputs (rebuild with engine/build-lc0.sh)
+engine/.venv/
+src-tauri/binaries/
+
+# Updater signing keys must never be committed
+*.key

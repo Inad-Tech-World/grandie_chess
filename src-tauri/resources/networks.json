@@ -1,0 +1,124 @@
+{
+  "networks": [
+    {
+      "id": "t1-256x10",
+      "name": "T1 256x10 distilled",
+      "kind": "leela",
+      "url": "https://storage.lczero.org/files/networks-contrib/t1-256x10-distilled-swa-2432500.pb.gz",
+      "size": 37118673,
+      "description": "Small transformer network. Strong analysis on most Macs; the recommended full-strength net when the GPU benchmark is fast enough."
+    },
+    {
+      "id": "791556",
+      "name": "791556 (T79, 192x15)",
+      "kind": "leela",
+      "url": "https://storage.lczero.org/files/networks/f404e156ceb2882470fd8c032b8754af0fa0b71168328912eaef14671a256e34",
+      "size": 18648209,
+      "description": "Classic residual network, lc0's long-time default. Fast on Intel Macs and on the CPU."
+    },
+    {
+      "id": "703810",
+      "name": "703810 (T70, 128x10)",
+      "kind": "leela",
+      "url": "https://storage.lczero.org/files/networks/b30e742bcfd905815e0e7dbd4e1bafb41ade748f85d006b8e28758f1a3107ae3",
+      "size": 6433429,
+      "description": "Tiny network used for the weaker Leela levels."
+    },
+    {
+      "id": "t1-512x15",
+      "name": "T1 512x15 distilled",
+      "kind": "leela",
+      "url": "https://storage.lczero.org/files/networks-contrib/t1-512x15x8h-distilled-swa-3395000.pb.gz",
+      "size": 149758071,
+      "description": "Larger transformer network. Best on Apple Silicon."
+    },
+    {
+      "id": "bt4-it332",
+      "name": "BT4 1024x15 (it332)",
+      "kind": "leela",
+      "url": "https://storage.lczero.org/files/networks-contrib/BT4-1024x15x32h-swa-6147500-policytune-332.pb.gz",
+      "size": 382645315,
+      "description": "Leela's strongest network. Needs a fast Apple Silicon GPU."
+    },
+    {
+      "id": "maia-1100",
+      "name": "Maia 1100",
+      "kind": "maia",
+      "url": "https://github.com/CSSLab/maia-chess/releases/download/v1.0/maia-1100.pb.gz",
+      "size": 1313193,
+      "description": "Trained on human games rated around 1100; plays human-style moves."
+    },
+    {
+      "id": "maia-1200",
+      "name": "Maia 1200",
+      "kind": "maia",
+      "url": "https://github.com/CSSLab/maia-chess/releases/download/v1.0/maia-1200.pb.gz",
+      "size": 1249692,
+      "description": "Trained on human games rated around 1200; plays human-style moves."
+    },
+    {
+      "id": "maia-1300",
+      "name": "Maia 1300",
+      "kind": "maia",
+      "url": "https://github.com/CSSLab/maia-chess/releases/download/v1.0/maia-1300.pb.gz",
+      "size": 1244431,
+      "description": "Trained on human games rated around 1300; plays human-style moves."
+    },
+    {
+      "id": "maia-1400",
+      "name": "Maia 1400",
+      "kind": "maia",
+      "url": "https://github.com/CSSLab/maia-chess/releases/download/v1.0/maia-1400.pb.gz",
+      "size": 1328977,
+      "description": "Trained on human games rated around 1400; plays human-style moves."
+    },
+    {
+      "id": "maia-1500",
+      "name": "Maia 1500",
+      "kind": "maia",
+      "url": "https://github.com/CSSLab/maia-chess/releases/download/v1.0/maia-1500.pb.gz",
+      "size": 1258199,
+      "description": "Trained on human games rated around 1500; plays human-style moves."
+    },
+    {
+      "id": "maia-1600",
+      "name": "Maia 1600",
+      "kind": "maia",
+      "url": "https://github.com/CSSLab/maia-chess/releases/download/v1.0/maia-1600.pb.gz",
+      "size": 1313870,
+      "description": "Trained on human games rated around 1600; plays human-style moves."
+    },
+    {
+      "id": "maia-1700",
+      "name": "Maia 1700",
+      "kind": "maia",
+      "url": "https://github.com/CSSLab/maia-chess/releases/download/v1.0/maia-1700.pb.gz",
+      "size": 1313415,
+      "description": "Trained on human games rated around 1700; plays human-style moves."
+    },
+    {
+      "id": "maia-1800",
+      "name": "Maia 1800",
+      "kind": "maia",
+      "url": "https://github.com/CSSLab/maia-chess/releases/download/v1.0/maia-1800.pb.gz",
+      "size": 1289431,
+      "description": "Trained on human games rated around 1800; plays human-style moves."
+    },
+    {
+      "id": "maia-1900",
+      "name": "Maia 1900",
+      "kind": "maia",
+      "url": "https://github.com/CSSLab/maia-chess/releases/download/v1.0/maia-1900.pb.gz",
+      "size": 1262607,
+      "description": "Trained on human games rated around 1900; plays human-style moves."
+    },
+    {
+      "id": "maia-2200",
+      "name": "Maia 2200 (community)",
+      "kind": "maia",
+      "url": "https://github.com/CallOn84/LeelaNets/raw/refs/heads/main/Nets/Maia%202200/maia-2200.pb.gz",
+      "size": 1156609,
+      "description": "Community-trained Maia-style net at about 2200 (CallOn84, GPL-3.0)."
+    }
+  ]
+}

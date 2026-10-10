@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Apple Silicon: verifies the arm64 build, which can't be tested on an Intel dev Mac.
+          - runner: macos-15
+            target: aarch64-apple-darwin
+          # Intel.
+          - runner: macos-15-intel
+            target: x86_64-apple-darwin
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Cache lc0 build
+        id: lc0-cache
+        uses: actions/cache@v4
+        with:
+          path: src-tauri/binaries
+          key: lc0-${{ matrix.target }}-${{ hashFiles('.git/modules/engine/lc0/HEAD', 'engine/build-lc0.sh') }}
+
+      - name: Build lc0
+        if: steps.lc0-cache.outputs.cache-hit != 'true'
+        run: engine/build-lc0.sh
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+
+      - name: Rust tests
+        working-directory: src-tauri
+        run: cargo test
+
+      - name: End-to-end tests (UI against the mock backend)
+        run: |
+          pnpm exec playwright install --with-deps chromium
+          pnpm e2e
+
+      - name: Build app (unbundled)
+        run: pnpm tauri build --no-bundle
