@@ -11,11 +11,7 @@ use crate::error::{Error, Result};
 pub const USER_AGENT: &str = concat!("GrandieChess/", env!("CARGO_PKG_VERSION"), " (+https://github.com/OWNER/grandie-chess)");
 
 pub fn http_client() -> reqwest::Client {
-    reqwest::Client::builder()
-        .user_agent(USER_AGENT)
-        .connect_timeout(Duration::from_secs(20))
-        .build()
-        .expect("HTTP client builds")
+    reqwest::Client::builder().user_agent(USER_AGENT).connect_timeout(Duration::from_secs(20)).build().expect("HTTP client builds")
 }
 
 /// Download `url` to `dest`, writing to `dest.part` first so a cancelled or
@@ -61,9 +57,7 @@ pub async fn download_file(
     if let Some(expected) = expected_size {
         if received != expected {
             let _ = tokio::fs::remove_file(&part).await;
-            return Err(Error::other(format!(
-                "download incomplete: got {received} bytes, expected {expected}"
-            )));
+            return Err(Error::other(format!("download incomplete: got {received} bytes, expected {expected}")));
         }
     }
     tokio::fs::rename(&part, dest).await?;
@@ -75,8 +69,5 @@ pub async fn download_file(
 pub fn looks_like_network(path: &Path) -> bool {
     use std::io::Read;
     let mut magic = [0u8; 2];
-    std::fs::File::open(path)
-        .and_then(|mut f| f.read_exact(&mut magic))
-        .map(|_| magic == [0x1f, 0x8b])
-        .unwrap_or(false)
+    std::fs::File::open(path).and_then(|mut f| f.read_exact(&mut magic)).map(|_| magic == [0x1f, 0x8b]).unwrap_or(false)
 }

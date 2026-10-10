@@ -194,7 +194,7 @@ textarea,
 .workspace {
   height: 100%;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 380px);
   gap: 16px;
   padding: 14px 16px 16px;
   box-sizing: border-box;

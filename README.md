@@ -40,9 +40,10 @@ Other useful commands:
 | `engine/build-lc0.sh --prebuilt` | Use the official universal lc0 v0.32.0 binary instead of building |
 | `pnpm test` | Frontend unit tests (Vitest) |
 | `pnpm e2e` | End-to-end UI tests in Chromium against a mock backend (Playwright) |
-| `cd src-tauri && cargo test` | Rust tests, including games against a scripted fake engine |
+| `cd src-tauri && cargo test --workspace` | Rust tests, including games against a scripted fake engine |
+| `cd src-tauri && cargo fmt --all && cargo clippy --workspace --all-targets` | Format and lint the Rust code (CI rejects any warning) |
 | `cd src-tauri && cargo test --test lc0_real -- --ignored` | Tests against the real lc0 and downloaded networks |
-| `cd src-tauri && cargo run --profile perf --bin calibrate -- --a leela-4 --b maia-1500` | Estimate an opponent level's rating with engine matches |
+| `cd src-tauri && cargo run --profile perf -p grandie-dev-tools --bin calibrate -- --a leela-4 --b maia-1500` | Estimate an opponent level's rating with engine matches |
 | `pnpm tauri build --target universal-apple-darwin` | Build the universal app and DMG |
 
 See [`engine/BENCHMARKS.md`](engine/BENCHMARKS.md) for engine speed on an Intel Mac, and [`docs/RELEASING.md`](docs/RELEASING.md) for signing, notarisation and auto-updates.

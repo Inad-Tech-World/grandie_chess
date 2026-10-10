@@ -40,6 +40,8 @@ jobs:
           node-version: 22
           cache: pnpm
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
@@ -66,9 +68,15 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
 
+      - name: Rust formatting
+        working-directory: src-tauri
+        run: cargo fmt --all --check
+      - name: Rust lints
+        working-directory: src-tauri
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Rust tests
         working-directory: src-tauri
-        run: cargo test --locked
+        run: cargo test --workspace --locked
 
       # The Rust tests regenerate the TypeScript bindings; they must already be committed.
       - name: TypeScript bindings are up to date

@@ -51,10 +51,8 @@ pub fn game_reaches(start_fen: Option<&str>, moves: &str, required: &[(Square, P
 pub fn position_hits(conn: &Connection, pq: &PositionQuery, candidates_sql: &str, args: &[Value]) -> Result<Vec<i64>> {
     if pq.exact {
         let hash = hash_of(&parse_fen(&pq.fen)?) as i64;
-        let sql = format!(
-            "SELECT c.id FROM ({candidates_sql}) c WHERE c.id IN (SELECT game_id FROM positions WHERE hash = ?{})",
-            args.len() + 1
-        );
+        let sql =
+            format!("SELECT c.id FROM ({candidates_sql}) c WHERE c.id IN (SELECT game_id FROM positions WHERE hash = ?{})", args.len() + 1);
         let mut all: Vec<Value> = args.to_vec();
         all.push(Value::Integer(hash));
         let mut stmt = conn.prepare(&sql)?;
@@ -63,17 +61,12 @@ pub fn position_hits(conn: &Connection, pq: &PositionQuery, candidates_sql: &str
     }
     let required: Vec<(Square, Piece)> = board_of(&pq.fen)?.iter().collect();
     let mut stmt = conn.prepare(candidates_sql)?;
-    let games: Vec<(i64, Option<String>, String)> = stmt
-        .query_map(params_from_iter(args.iter()), |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
+    let games: Vec<(i64, Option<String>, String)> =
+        stmt.query_map(params_from_iter(args.iter()), |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?.collect::<rusqlite::Result<Vec<_>>>()?;
     if required.is_empty() {
         return Ok(games.into_iter().map(|g| g.0).collect());
     }
-    Ok(games
-        .par_iter()
-        .filter(|(_, fen, moves)| game_reaches(fen.as_deref(), moves, &required).is_some())
-        .map(|(id, _, _)| *id)
-        .collect())
+    Ok(games.par_iter().filter(|(_, fen, moves)| game_reaches(fen.as_deref(), moves, &required).is_some()).map(|(id, _, _)| *id).collect())
 }
 
 #[cfg(test)]
@@ -91,7 +84,8 @@ mod tests {
         import_reader(&pool, PGN.as_bytes(), "pgn", &UserIdentity::default(), |_| {}).unwrap();
         // After 1. e4 e5 2. Nf3 Nc6: reached in the Italian and the Ruy Lopez.
         let fen = "r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3";
-        let exact = query(&pool, &GameQuery { position: Some(PositionQuery { fen: fen.into(), exact: true }), ..Default::default() }).unwrap();
+        let exact =
+            query(&pool, &GameQuery { position: Some(PositionQuery { fen: fen.into(), exact: true }), ..Default::default() }).unwrap();
         assert_eq!(exact.total, 2);
         // Partial: a white bishop on b5 and a black knight on c6 (Ruy Lopez only).
         let partial = PositionQuery { fen: "8/8/2n5/1B6/8/8/8/8".into(), exact: false };

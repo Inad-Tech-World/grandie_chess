@@ -68,10 +68,7 @@ fn main() -> io::Result<()> {
             Some("go") => {
                 let best = choose(&pos).unwrap_or_else(|| "0000".into());
                 std::thread::sleep(Duration::from_millis(delay));
-                writeln!(
-                    out,
-                    "info depth 1 seldepth 1 time {delay} nodes 1 score cp 0 wdl {wdl} nps 1 tbhits 0 pv {best}"
-                )?;
+                writeln!(out, "info depth 1 seldepth 1 time {delay} nodes 1 score cp 0 wdl {wdl} nps 1 tbhits 0 pv {best}")?;
                 if tokens.contains(&"infinite") {
                     pending = Some(best);
                 } else {

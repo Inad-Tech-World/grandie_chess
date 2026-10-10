@@ -77,10 +77,7 @@ impl Lc0Config {
     /// The `setoption` commands, in order. Hidden lc0 options (Temperature and
     /// friends) are accepted even though `uci` doesn't list them.
     pub fn commands(&self) -> Vec<(String, String)> {
-        let mut out = vec![
-            ("WeightsFile".to_string(), self.weights.to_string_lossy().into_owned()),
-            ("UCI_ShowWDL".into(), "true".into()),
-        ];
+        let mut out = vec![("WeightsFile".to_string(), self.weights.to_string_lossy().into_owned()), ("UCI_ShowWDL".into(), "true".into())];
         if let Some(b) = &self.backend {
             out.push(("Backend".into(), b.clone()));
         }
@@ -157,8 +154,7 @@ mod tests {
         assert!(cmds.contains(&("UCI_ShowWDL".into(), "true".into())));
         assert!(cmds.iter().any(|(n, _)| n == "Temperature"));
 
-        let mut no_variety = Settings::default();
-        no_variety.opponent_variety = false;
+        let no_variety = Settings { opponent_variety: false, ..Settings::default() };
         let cfg = Lc0Config::for_level(level, "/n/m.pb.gz".into(), &no_variety);
         assert!(!cfg.commands().iter().any(|(n, _)| n == "Temperature"));
     }
@@ -166,9 +162,7 @@ mod tests {
     #[test]
     fn deep_searching_levels_use_the_users_backend() {
         let c = Catalog::load();
-        let mut s = Settings::default();
-        s.backend = Some("metal".into());
-        s.backend_opts = Some("gpu=1".into());
+        let s = Settings { backend: Some("metal".into()), backend_opts: Some("gpu=1".into()), ..Settings::default() };
         // More than 16 nodes per move: worth the GPU.
         let deep = OpponentLevel { nodes: Some(64), ..c.level("leela-8").unwrap().clone() };
         let cfg = Lc0Config::for_level(&deep, "/n/x".into(), &s);

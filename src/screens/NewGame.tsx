@@ -84,10 +84,24 @@ export function NewGame({ tabId }: { tabId: string }) {
   const replaceTab = useApp((s) => s.replaceTab);
   const { networks, progress, refresh, download } = useDownloads();
 
+  const [strength, setStrength] = useState<number | null>(null);
+
   useEffect(() => {
     void commands.levelsList().then(setLevels);
     void refresh();
+    void commands.progressSummary().then((r) => {
+      const last = r.status === "ok" ? r.data.strength[r.data.strength.length - 1] : undefined;
+      if (last?.rating) setStrength(last.rating);
+    });
   }, [refresh]);
+
+  // Suggest an opponent a little stronger than the user's estimated strength.
+  const recommended = useMemo(() => {
+    if (strength === null) return null;
+    const target = strength + 100;
+    const pool = levels.filter((l) => l.elo !== null && (target <= 2000 ? l.kind === "maia" : l.kind === "leela"));
+    return pool.reduce<OpponentLevel | null>((best, l) => (!best || Math.abs((l.elo ?? 0) - target) < Math.abs((best.elo ?? 0) - target) ? l : best), null);
+  }, [strength, levels]);
 
   const setSetup = (patch: Partial<StoredSetup>) => {
     setSetupState((s) => {
@@ -168,9 +182,23 @@ export function NewGame({ tabId }: { tabId: string }) {
       <Title order={2} mb={4}>
         New game
       </Title>
-      <Text c="dimmed" mb="lg">
+      <Text c="dimmed" mb={recommended ? "sm" : "lg"}>
         Choose an opponent at your level. Every game is saved and can be reviewed afterwards.
       </Text>
+      {recommended && strength !== null && (
+        <Group mb="lg" gap="xs">
+          <Text size="sm">
+            Your estimated strength is about {Math.round(strength)}. Recommended: <b>{recommended.name}</b>
+          </Text>
+          <Button
+            size="compact-xs"
+            variant="light"
+            onClick={() => setSetup(recommended.kind === "maia" ? { type: "maia", maia: recommended.id } : { type: "leela", leela: recommended.id })}
+          >
+            Use it
+          </Button>
+        </Group>
+      )}
 
       <Stack gap="lg">
         <Card withBorder radius="lg" padding="lg">

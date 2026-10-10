@@ -15,7 +15,7 @@ import { MoveTree } from "../moves/MoveTree";
 import { EnginePanel } from "../analysis/EnginePanel";
 import { EvalGraph } from "../analysis/EvalGraph";
 import { ReviewPanel } from "../analysis/ReviewPanel";
-import { commands, notifyError, unwrap, type MoveReview, type ReviewDepth } from "../lib/api";
+import { commands, notifyError, unwrap, type MoveReview, type OpeningName, type ReviewDepth } from "../lib/api";
 import { addApplied, deleteFrom, header, mainline, promoteToMainline, survivorAfterDelete, toggleNag, uciPath, updateNode } from "../lib/tree";
 import { CLASS_STYLE } from "../lib/score";
 import { useAnalysis } from "../stores/analysis";
@@ -24,6 +24,7 @@ import { sameFen, useEngines } from "../stores/engines";
 import { useReviews } from "../stores/reviews";
 import { useApp } from "../stores/app";
 import { primePositionInfo, usePositionInfo } from "../lib/usePositionInfo";
+import { playSound, soundForSan } from "../lib/sounds";
 
 interface RetryState {
   move: MoveReview;
@@ -58,6 +59,7 @@ export function AnalysisScreen({ analysisId, tabId }: { analysisId: string; tabI
   const [editingComment, setEditingComment] = useState<number | null>(null);
   const [extraArrows, setExtraArrows] = useState<Arrow[]>([]);
   const moveQueue = useRef<Promise<boolean>>(Promise.resolve(true));
+  const [opening, setOpening] = useState<OpeningName | null>(null);
 
   const node = doc?.tree.nodes[retry ? retry.nodeId : doc.current];
   const info = usePositionInfo(node?.fen);
@@ -122,6 +124,14 @@ export function AnalysisScreen({ analysisId, tabId }: { analysisId: string; tabI
   }, [running, fen, enabledKey, engineTab.multipv, tabId]);
 
   useEffect(() => () => engineTab.enabled.forEach((e) => void commands.analysisStop(e)), []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Name of the opening reached by the current line.
+  const rootFen = doc?.tree.nodes[0].fen;
+  const movesKey = moves.join(" ");
+  useEffect(() => {
+    if (!rootFen) return;
+    void commands.openingName(rootFen, movesKey ? movesKey.split(" ") : []).then(setOpening);
+  }, [rootFen, movesKey]);
 
   // ---- auto review after a game ----
   const startReview = useCallback(
@@ -203,6 +213,7 @@ export function AnalysisScreen({ analysisId, tabId }: { analysisId: string; tabI
         const check = await unwrap(commands.reviewCheckMove(node.fen, uci));
         const ok = (check.winAfter ?? 0) >= (retry.move.winBefore ?? 0) - 5 || uci === retry.move.best;
         setRetry({ ...retry, status: ok ? "correct" : "wrong", tried: { san: check.san, winAfter: check.winAfter ?? 0 } });
+        playSound(ok ? "correct" : "wrong");
       } catch (e) {
         notifyError("Could not check the move", e);
         setRetry({ ...retry, status: "waiting" });
@@ -212,6 +223,7 @@ export function AnalysisScreen({ analysisId, tabId }: { analysisId: string; tabI
     try {
       const applied = await unwrap(commands.chessApplyMove(node.fen, uci));
       primePositionInfo(applied.position);
+      playSound(soundForSan(applied.san));
       const { tree, id } = addApplied(doc.tree, doc.current, applied);
       update(analysisId, { tree, current: id });
       setExtraArrows([]);
@@ -393,6 +405,11 @@ export function AnalysisScreen({ analysisId, tabId }: { analysisId: string; tabI
           </div>
         ) : (
           <div className="panel" style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+            {opening && (
+              <Text size="xs" px={12} pt={8} c="dimmed" aria-label="Opening">
+                <b>{opening.eco}</b> {opening.name}
+              </Text>
+            )}
             {(white || black) && (
               <div style={{ padding: "8px 12px 0" }}>
                 <Text fw={650} size="sm">

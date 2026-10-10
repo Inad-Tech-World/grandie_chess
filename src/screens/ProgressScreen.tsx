@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { Card, Group, SimpleGrid, Table, Text, Title, Tooltip as MTooltip } from "@mantine/core";
-import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Card, Group, Select, SimpleGrid, Table, Text, Title, Tooltip as MTooltip } from "@mantine/core";
+import { Bar, BarChart, CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { commands, type ProgressSummary } from "../lib/api";
 import { openDbGame } from "../lib/actions";
 
@@ -51,6 +51,7 @@ const tooltipStyle = {
 
 export function ProgressScreen() {
   const [data, setData] = useState<ProgressSummary | null>(null);
+  const [level, setLevel] = useState<string | null>(null);
   useEffect(() => {
     void commands.progressSummary().then((r) => r.status === "ok" && setData(r.data));
   }, []);
@@ -68,6 +69,8 @@ export function ProgressScreen() {
     detail: `${q.inaccuracies} inaccuracies · ${q.mistakes} mistakes · ${q.blunders} blunders`,
   }));
   const puzzles = data.puzzleHistory.map((p, i) => ({ n: i + 1, rating: Math.round(p.rating ?? 0) }));
+  const series = data.levelSeries.find((s) => s.level === level) ?? data.levelSeries[0];
+  const seriesPoints = (series?.points ?? []).map((p, i) => ({ game: i + 1, at: day(p.at), rating: Math.round(p.rating ?? 0) }));
 
   return (
     <div className="screen">
@@ -105,6 +108,44 @@ export function ProgressScreen() {
             </LineChart>
           </ResponsiveContainer>
         </ChartCard>
+        <Card withBorder radius="lg" padding="md">
+          <Group justify="space-between" mb="xs">
+            <Text fw={600} size="sm">
+              Against each level over time
+            </Text>
+            {data.levelSeries.length > 0 && (
+              <Select
+                size="xs"
+                w={170}
+                value={series?.level ?? null}
+                onChange={setLevel}
+                data={data.levelSeries.map((s) => ({ value: s.level, label: s.name }))}
+                allowDeselect={false}
+                aria-label="Opponent level"
+              />
+            )}
+          </Group>
+          {seriesPoints.length < 2 ? (
+            <Text size="sm" c="dimmed" py="lg" ta="center">
+              Play a few games against the same level to see how your results change.
+            </Text>
+          ) : (
+            <div style={{ height: 190 }}>
+              <ResponsiveContainer>
+                <LineChart data={seriesPoints} margin={{ top: 6, right: 8, bottom: 0, left: -12 }}>
+                  <CartesianGrid stroke="var(--hairline)" vertical={false} />
+                  <XAxis dataKey="game" {...axis} />
+                  <YAxis {...axis} domain={["dataMin - 100", "dataMax + 100"]} allowDecimals={false} />
+                  {series?.elo ? (
+                    <ReferenceLine y={series.elo} stroke="var(--text-dim)" strokeDasharray="4 4" label={{ value: `${series.name} ≈${series.elo}`, fill: "var(--text-dim)", fontSize: 11, position: "insideTopLeft" }} />
+                  ) : null}
+                  <Tooltip {...tooltipStyle} labelFormatter={(_, p) => `Game ${p?.[0]?.payload?.game ?? ""} · ${p?.[0]?.payload?.at ?? ""}`} formatter={(v) => [v, "Performance"]} />
+                  <Line type="monotone" dataKey="rating" stroke="var(--mantine-color-blue-5)" strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} isAnimationActive={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </Card>
         <ChartCard title="Puzzle rating" empty={puzzles.length < 2 ? "Solve a few puzzles to see your rating move." : null}>
           <ResponsiveContainer>
             <LineChart data={puzzles} margin={{ top: 6, right: 8, bottom: 0, left: -12 }}>

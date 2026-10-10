@@ -31,7 +31,7 @@ Measured 2026-10-10 with lc0 v0.32.1 built by `engine/build-lc0.sh` (x86_64, Met
 
 ## Opponent level calibration
 
-Engine matches with `cargo run --profile perf --bin calibrate` on this Mac (2026-10-10), 16 games per pairing, alternating colours. Anchors: Maia levels at their nominal rating (Maia uses 1 node and opening variety), and Stockfish 19 with `UCI_LimitStrength`. With 16 games each estimate is about ±150 Elo, so the ratings in `src-tauri/resources/levels.json` are smoothed to keep the ladder in order.
+Engine matches with `cargo run --profile perf -p grandie-dev-tools --bin calibrate` on this Mac (2026-10-10), 16 games per pairing, alternating colours. Anchors: Maia levels at their nominal rating (Maia uses 1 node and opening variety), and Stockfish 19 with `UCI_LimitStrength`. With 16 games each estimate is about ±150 Elo, so the ratings in `src-tauri/resources/levels.json` are smoothed to keep the ladder in order.
 
 | Level | Network | Nodes | Temperature | Anchor | Score | Measured | Listed |
 |---|---|---|---|---|---|---|---|

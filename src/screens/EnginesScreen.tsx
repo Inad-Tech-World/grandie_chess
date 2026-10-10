@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Badge, Button, Card, Group, NumberInput, Progress, Radio, Stack, Table, Text, Title, Tooltip } from "@mantine/core";
+import { Badge, Button, Card, Group, NumberInput, Progress, Radio, Select, SimpleGrid, Stack, Table, Text, Title, Tooltip } from "@mantine/core";
 import { IconCpu, IconDownload, IconFolderOpen, IconGauge, IconTrash } from "@tabler/icons-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { commands, notifyError, tryCommand, type AppInfo, type BackendResult, type EngineConfig, type NetworkEntry } from "../lib/api";
@@ -7,6 +7,21 @@ import { useEngines } from "../stores/engines";
 import { formatBytes } from "../lib/format";
 import { downloadFraction, useDownloads } from "../stores/downloads";
 import { useSettings } from "../stores/settings";
+
+const BACKENDS: { value: string; label: string; backend: string | null; opts: string | null }[] = [
+  { value: "auto", label: "Automatic (lc0 chooses)", backend: null, opts: null },
+  { value: "metal-0", label: "Metal, GPU 0", backend: "metal", opts: "gpu=0" },
+  { value: "metal-1", label: "Metal, GPU 1", backend: "metal", opts: "gpu=1" },
+  { value: "metal-2", label: "Metal, GPU 2", backend: "metal", opts: "gpu=2" },
+  { value: "blas", label: "CPU (Accelerate)", backend: "blas", opts: null },
+  { value: "eigen", label: "CPU (Eigen)", backend: "eigen", opts: null },
+];
+
+function backendKey(backend: string | null, opts: string | null): string {
+  if (!backend) return "auto";
+  if (backend === "metal") return `metal-${(opts ?? "gpu=0").replace("gpu=", "")}`;
+  return backend;
+}
 
 export function EnginesScreen() {
   const { networks, progress, refresh, download } = useDownloads();
@@ -37,6 +52,10 @@ export function EnginesScreen() {
     await tryCommand(commands.engineAdd(path), "That file isn't a UCI chess engine");
     await refreshEngines();
   }
+
+  const lc0 = engines.find((e) => e.kind === "lc0");
+  const lc0Option = (name: string) => lc0?.options.find((o) => o.name === name)?.value;
+  const setLc0Option = (name: string, value: string) => (lc0 ? setOption(lc0, name, value) : Promise.resolve());
 
   async function setOption(engine: EngineConfig, name: string, value: string) {
     const options = [...engine.options.filter((o) => o.name !== name), { name, value }];
@@ -155,6 +174,48 @@ export function EnginesScreen() {
             Find fastest backend
           </Button>
         </Group>
+        <SimpleGrid cols={{ base: 1, sm: 4 }} mt="md" spacing="sm">
+          <Select
+            size="xs"
+            label="Backend"
+            value={backendKey(settings.backend, settings.backendOpts)}
+            onChange={(v) => {
+              const choice = BACKENDS.find((b) => b.value === v);
+              if (choice) void update({ backend: choice.backend, backendOpts: choice.opts });
+            }}
+            data={BACKENDS.map((b) => ({ value: b.value, label: b.label }))}
+            allowDeselect={false}
+          />
+          <NumberInput
+            size="xs"
+            label="Search threads"
+            description="Empty = automatic"
+            min={1}
+            max={32}
+            value={settings.threads ?? ""}
+            onChange={(v) => void update({ threads: v === "" ? null : Number(v) })}
+          />
+          <NumberInput
+            size="xs"
+            label="Cache (positions)"
+            description="NNCacheSize"
+            min={100000}
+            max={20000000}
+            step={100000}
+            thousandSeparator=","
+            value={Number(lc0Option("NNCacheSize") ?? 2000000)}
+            onChange={(v) => void setLc0Option("NNCacheSize", String(v || 2000000))}
+          />
+          <NumberInput
+            size="xs"
+            label="Batch size"
+            description="MinibatchSize, 0 = automatic"
+            min={0}
+            max={1024}
+            value={Number(lc0Option("MinibatchSize") ?? 0)}
+            onChange={(v) => void setLc0Option("MinibatchSize", String(v || 0))}
+          />
+        </SimpleGrid>
         {benchRunning && (
           <Text size="xs" c="dimmed" mt="sm">
             Timing every GPU and the CPU. This takes about a minute.

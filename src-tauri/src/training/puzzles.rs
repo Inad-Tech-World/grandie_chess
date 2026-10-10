@@ -70,9 +70,8 @@ pub struct MoveVerdict {
 }
 
 pub fn open(path: &Path) -> Result<DbPool> {
-    let manager = SqliteConnectionManager::file(path).with_init(|c| {
-        c.execute_batch("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA busy_timeout = 5000;")
-    });
+    let manager = SqliteConnectionManager::file(path)
+        .with_init(|c| c.execute_batch("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA busy_timeout = 5000;"));
     let pool = Pool::builder().max_size(4).build(manager)?;
     pool.get()?.execute_batch(
         "CREATE TABLE IF NOT EXISTS puzzles (
@@ -119,7 +118,12 @@ struct CsvRow {
 
 /// Import puzzles from the (decompressed) CSV, replacing what was there.
 /// `progress(read, kept)` is called every 20,000 rows. Returns the number kept.
-pub fn import_csv<R: Read>(pool: &DbPool, reader: R, filter: Option<PuzzleImportFilter>, mut progress: impl FnMut(u64, u64)) -> Result<u64> {
+pub fn import_csv<R: Read>(
+    pool: &DbPool,
+    reader: R,
+    filter: Option<PuzzleImportFilter>,
+    mut progress: impl FnMut(u64, u64),
+) -> Result<u64> {
     let mut conn = pool.get()?;
     let tx = conn.transaction()?;
     tx.execute_batch("DELETE FROM puzzles; DELETE FROM themes;")?;
@@ -236,7 +240,7 @@ pub fn get(pool: &DbPool, id: &str) -> Result<Puzzle> {
 /// Check the user's move at `index` in the solution (an odd index: the
 /// opponent plays index 0). On the final move any checkmate is accepted.
 pub fn check_move(p: &Puzzle, index: usize, uci: &str) -> Result<MoveVerdict> {
-    if index == 0 || index >= p.moves.len() || index % 2 == 0 {
+    if index == 0 || index >= p.moves.len() || index.is_multiple_of(2) {
         return Err(Error::Chess("not the solver's turn".into()));
     }
     let mut pos = parse_fen(&p.fen)?;
@@ -253,11 +257,7 @@ pub fn check_move(p: &Puzzle, index: usize, uci: &str) -> Result<MoveVerdict> {
         after.is_checkmate()
     };
     let correct = played_uci == p.moves[index] || (last && mates);
-    Ok(MoveVerdict {
-        correct,
-        reply: if correct && !last { p.moves.get(index + 1).cloned() } else { None },
-        done: correct && last,
-    })
+    Ok(MoveVerdict { correct, reply: if correct && !last { p.moves.get(index + 1).cloned() } else { None }, done: correct && last })
 }
 
 // ---- the user's puzzle history (main database) ----
@@ -338,6 +338,21 @@ LOWPOP,8/8/8/8/8/8/8/K6k w - - 0 1,a1a2 h1h2,900,80,10,5,endgame,,,
         assert_eq!(endgame.id, "0000D", "theme filter widens the rating window");
         let none = next(&pool, 1500.0, Some("endgame"), &["0000D".into()]).unwrap();
         assert!(none.is_none());
+    }
+
+    #[test]
+    fn imports_from_a_zstd_stream_like_the_download() {
+        let dir = tempfile::tempdir().unwrap();
+        let pool = open(&dir.path().join("p.db")).unwrap();
+        let compressed = zstd::encode_all(CSV.as_bytes(), 3).unwrap();
+        let decoder = zstd::Decoder::new(compressed.as_slice()).unwrap();
+        let mut calls = 0;
+        let kept = import_csv(&pool, decoder, None, |_, _| calls += 1).unwrap();
+        assert_eq!(kept, 4, "no filter keeps everything");
+        assert!(calls >= 1);
+        // Importing again replaces rather than duplicates.
+        let again = import_csv(&pool, CSV.as_bytes(), None, |_, _| {}).unwrap();
+        assert_eq!((again, count(&pool).unwrap()), (4, 4));
     }
 
     #[test]

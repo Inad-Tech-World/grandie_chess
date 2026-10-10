@@ -10,9 +10,7 @@ use grandie_chess_lib::engine::process::{position_command, Engine};
 use grandie_chess_lib::game::clock::TimeControl;
 use grandie_chess_lib::game::pgn::read_pgn_file;
 use grandie_chess_lib::game::position::{EndReason, Side, START_FEN};
-use grandie_chess_lib::game::session::{
-    ClockTick, PlayContext, PlayManager, PlayObserver, PlaySetup, PlaySnapshot, SideChoice,
-};
+use grandie_chess_lib::game::session::{ClockTick, PlayContext, PlayManager, PlayObserver, PlaySetup, PlaySnapshot, SideChoice};
 use grandie_chess_lib::settings::Settings;
 
 const FAKE: &str = env!("CARGO_BIN_EXE_fake-uci");
@@ -43,9 +41,7 @@ fn fixture() -> Fixture {
         std::fs::write(network_path(&networks, id), b"fake").unwrap();
     }
     let (tx, rx) = channel();
-    let mut settings = Settings::default();
-    settings.human_think_time = false;
-    settings.player_name = "Tester".into();
+    let settings = Settings { human_think_time: false, player_name: "Tester".into(), ..Settings::default() };
     let ctx = Arc::new(PlayContext {
         observer: Arc::new(Collector(Mutex::new(tx))),
         settings,

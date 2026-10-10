@@ -357,6 +357,9 @@ export type GameQuery = {
 	/**  Inclusive bounds, "YYYY-MM-DD". */
 	dateFrom?: string | null,
 	dateTo?: string | null,
+	/**  Bounds on the game's average rating (of the players with a rating). */
+	minRating?: number | null,
+	maxRating?: number | null,
 	position?: PositionQuery | null,
 	sort?: SortColumn | null,
 	desc?: boolean,
@@ -426,6 +429,14 @@ export type LevelResult = {
 	losses: number,
 	/**  Performance rating against this level, if it has a rating. */
 	performance: number | null,
+};
+
+/**  Performance against one opponent level over time. */
+export type LevelSeries = {
+	level: string,
+	name: string,
+	elo: number | null,
+	points: RatingPoint[],
 };
 
 /**  A native menu item was chosen, e.g. "new_game" or "open_pgn". */
@@ -620,6 +631,8 @@ export type PositionQuery = {
 export type ProgressSummary = {
 	totals: Totals,
 	levels: LevelResult[],
+	/**  Rolling performance against each level, game by game. */
+	levelSeries: LevelSeries[],
 	/**  Estimated playing strength over time (rolling performance in Grandie games). */
 	strength: RatingPoint[],
 	quality: GameQuality[],
@@ -745,6 +758,8 @@ export type Settings = {
 	showCoordinates?: boolean,
 	animationMs?: number,
 	showEvalBar?: boolean,
+	/**  Move, capture and game-end sounds. */
+	sound?: boolean,
 	lichessUsername?: string | null,
 	chesscomUsername?: string | null,
 	onboardingDone?: boolean,

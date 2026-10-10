@@ -16,8 +16,8 @@ use tokio::sync::Mutex;
 use super::clock::{Clock, ClockState, TimeControl};
 use super::pgn::write_pgn;
 use super::position::{
-    cannot_mate, fen_of, parse_fen, parse_uci, position_info, san_of, uci_of, EndReason, GameOutcome,
-    PositionInfo, RepetitionHistory, Side, START_FEN,
+    cannot_mate, fen_of, parse_fen, parse_uci, position_info, san_of, uci_of, EndReason, GameOutcome, PositionInfo, RepetitionHistory,
+    Side, START_FEN,
 };
 use super::tree::GameTree;
 use crate::engine::catalog::{network_path, resolve_full_network, Catalog, OpponentKind, OpponentLevel};
@@ -181,8 +181,7 @@ impl PlaySession {
             can_takeback: self.setup.allow_takebacks
                 && self.outcome.is_none()
                 && self.moves.iter().enumerate().any(|(i, _)| self.mover_of(i) == self.user_side),
-            can_offer_draw: self.outcome.is_none()
-                && self.last_draw_offer_ply.is_none_or(|p| self.moves.len() >= p + DRAW_OFFER_COOLDOWN),
+            can_offer_draw: self.outcome.is_none() && self.last_draw_offer_ply.is_none_or(|p| self.moves.len() >= p + DRAW_OFFER_COOLDOWN),
             error: self.error.clone(),
         }
     }
@@ -193,7 +192,7 @@ impl PlaySession {
 
     fn mover_of(&self, index: usize) -> Side {
         let first: Side = self.start.turn().into();
-        if index % 2 == 0 {
+        if index.is_multiple_of(2) {
             first
         } else {
             first.other()
@@ -270,10 +269,7 @@ impl PlaySession {
             };
             tree.set_header(tag, elo.to_string());
         }
-        tree.set_header(
-            "TimeControl",
-            self.setup.time_control.map(|tc| tc.pgn_tag()).unwrap_or_else(|| "-".into()),
-        );
+        tree.set_header("TimeControl", self.setup.time_control.map(|tc| tc.pgn_tag()).unwrap_or_else(|| "-".into()));
         if self.start_fen != START_FEN {
             tree.set_header("SetUp", "1");
             tree.set_header("FEN", &self.start_fen);
@@ -371,12 +367,7 @@ pub struct PlayManager {
 
 impl PlayManager {
     fn get(&self, id: u32) -> Result<SessionRef> {
-        self.sessions
-            .lock()
-            .unwrap()
-            .get(&id)
-            .cloned()
-            .ok_or_else(|| Error::NotFound(format!("no game with id {id}")))
+        self.sessions.lock().unwrap().get(&id).cloned().ok_or_else(|| Error::NotFound(format!("no game with id {id}")))
     }
 
     /// Networks a level needs that are not installed yet.
@@ -390,12 +381,7 @@ impl PlayManager {
                     vec![settings.default_network.clone().unwrap_or_else(|| "791556".into())]
                 }
             }
-            _ => level
-                .network
-                .iter()
-                .filter(|id| !network_path(networks_dir, id).exists())
-                .cloned()
-                .collect(),
+            _ => level.network.iter().filter(|id| !network_path(networks_dir, id).exists()).cloned().collect(),
         })
     }
 
@@ -675,8 +661,7 @@ async fn engine_move(session: &SessionRef) -> Result<()> {
     if last_wdl.is_some() {
         s.engine_wdl = last_wdl;
     }
-    s.apply_move(&result.best, Instant::now())
-        .map_err(|e| Error::Engine(format!("engine played an illegal move {}: {e}", result.best)))?;
+    s.apply_move(&result.best, Instant::now()).map_err(|e| Error::Engine(format!("engine played an illegal move {}: {e}", result.best)))?;
     s.emit();
     Ok(())
 }

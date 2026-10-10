@@ -70,12 +70,23 @@ impl InfoLine {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum OptionKind {
-    Check { default: bool },
+    Check {
+        default: bool,
+    },
     /// Numbers as f64: TypeScript has no 64-bit integers.
-    Spin { default: f64, min: f64, max: f64 },
-    Combo { default: String, vars: Vec<String> },
+    Spin {
+        default: f64,
+        min: f64,
+        max: f64,
+    },
+    Combo {
+        default: String,
+        vars: Vec<String>,
+    },
     Button,
-    String { default: String },
+    String {
+        default: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
@@ -93,7 +104,10 @@ pub enum UciMessage {
     ReadyOk,
     Option(UciOption),
     Info(InfoLine),
-    BestMove { best: String, ponder: Option<String> },
+    BestMove {
+        best: String,
+        ponder: Option<String>,
+    },
     Other(String),
     /// Not sent by engines: the process closed its output.
     Exited,
@@ -125,9 +139,7 @@ pub fn parse_line(line: &str) -> UciMessage {
             None => UciMessage::Other(line.to_string()),
         },
         Some("info") => UciMessage::Info(parse_info(&tokens[1..])),
-        Some("option") => parse_option(&tokens[1..])
-            .map(UciMessage::Option)
-            .unwrap_or_else(|| UciMessage::Other(line.to_string())),
+        Some("option") => parse_option(&tokens[1..]).map(UciMessage::Option).unwrap_or_else(|| UciMessage::Other(line.to_string())),
         _ => UciMessage::Other(line.to_string()),
     }
 }
@@ -182,11 +194,7 @@ fn parse_info(tokens: &[&str]) -> InfoLine {
                 continue;
             }
             "pv" => {
-                info.pv = tokens[i + 1..]
-                    .iter()
-                    .take_while(|t| !is_info_keyword(t))
-                    .map(|s| s.to_string())
-                    .collect();
+                info.pv = tokens[i + 1..].iter().take_while(|t| !is_info_keyword(t)).map(|s| s.to_string()).collect();
                 i += 1 + info.pv.len();
                 continue;
             }
@@ -207,8 +215,21 @@ fn parse_info(tokens: &[&str]) -> InfoLine {
 fn is_info_keyword(t: &str) -> bool {
     matches!(
         t,
-        "depth" | "seldepth" | "time" | "nodes" | "nps" | "multipv" | "hashfull" | "tbhits"
-            | "score" | "wdl" | "string" | "currmove" | "currmovenumber" | "movesleft" | "cpuload"
+        "depth"
+            | "seldepth"
+            | "time"
+            | "nodes"
+            | "nps"
+            | "multipv"
+            | "hashfull"
+            | "tbhits"
+            | "score"
+            | "wdl"
+            | "string"
+            | "currmove"
+            | "currmovenumber"
+            | "movesleft"
+            | "cpuload"
     )
 }
 
@@ -245,11 +266,9 @@ fn parse_option(tokens: &[&str]) -> Option<UciOption> {
     let default_str = default.clone().unwrap_or_default();
     let kind = match kind.as_str() {
         "check" => OptionKind::Check { default: default_str == "true" },
-        "spin" => OptionKind::Spin {
-            default: default_str.parse().unwrap_or(0.0),
-            min: min.unwrap_or(f64::MIN),
-            max: max.unwrap_or(f64::MAX),
-        },
+        "spin" => {
+            OptionKind::Spin { default: default_str.parse().unwrap_or(0.0), min: min.unwrap_or(f64::MIN), max: max.unwrap_or(f64::MAX) }
+        }
         "combo" => OptionKind::Combo { default: default_str, vars },
         "button" => OptionKind::Button,
         _ => OptionKind::String { default: default_str },
@@ -262,9 +281,12 @@ mod tests {
     use super::*;
 
     // Lines recorded from lc0 v0.32 with UCI_ShowWDL=true and from Stockfish 17.
-    const LC0_INFO: &str = "info depth 5 seldepth 12 time 1203 nodes 1873 score cp 24 wdl 112 832 56 hashfull 3 nps 1556 tbhits 0 pv e2e4 e7e5 g1f3 b8c6 f1b5";
-    const LC0_MULTIPV: &str = "info depth 3 seldepth 6 time 380 nodes 214 score cp -15 wdl 90 801 109 hashfull 0 nps 563 tbhits 0 multipv 2 pv d7d5 c2c4";
-    const SF_MATE: &str = "info depth 24 seldepth 6 multipv 1 score mate -3 nodes 152301 nps 1203000 hashfull 51 tbhits 0 time 126 pv h7h8 g2g8 h8g8";
+    const LC0_INFO: &str =
+        "info depth 5 seldepth 12 time 1203 nodes 1873 score cp 24 wdl 112 832 56 hashfull 3 nps 1556 tbhits 0 pv e2e4 e7e5 g1f3 b8c6 f1b5";
+    const LC0_MULTIPV: &str =
+        "info depth 3 seldepth 6 time 380 nodes 214 score cp -15 wdl 90 801 109 hashfull 0 nps 563 tbhits 0 multipv 2 pv d7d5 c2c4";
+    const SF_MATE: &str =
+        "info depth 24 seldepth 6 multipv 1 score mate -3 nodes 152301 nps 1203000 hashfull 51 tbhits 0 time 126 pv h7h8 g2g8 h8g8";
     const SF_BOUND: &str = "info depth 18 seldepth 25 multipv 1 score cp 31 lowerbound nodes 300000 nps 1000000 time 300 pv e2e4";
 
     #[test]
@@ -303,15 +325,10 @@ mod tests {
 
     #[test]
     fn parses_info_string_and_bestmove() {
-        let UciMessage::Info(info) = parse_line("info string e2e4  (322 ) N:     104 (+ 0) (P: 12.34%)") else {
-            panic!()
-        };
+        let UciMessage::Info(info) = parse_line("info string e2e4  (322 ) N:     104 (+ 0) (P: 12.34%)") else { panic!() };
         assert!(info.string.as_deref().unwrap().starts_with("e2e4"));
         assert!(!info.is_search_line());
-        assert_eq!(
-            parse_line("bestmove e2e4 ponder e7e5"),
-            UciMessage::BestMove { best: "e2e4".into(), ponder: Some("e7e5".into()) }
-        );
+        assert_eq!(parse_line("bestmove e2e4 ponder e7e5"), UciMessage::BestMove { best: "e2e4".into(), ponder: Some("e7e5".into()) });
         assert_eq!(parse_line("bestmove g1f3"), UciMessage::BestMove { best: "g1f3".into(), ponder: None });
     }
 
@@ -321,15 +338,11 @@ mod tests {
         assert_eq!(parse_line("uciok"), UciMessage::UciOk);
         assert_eq!(parse_line("readyok"), UciMessage::ReadyOk);
 
-        let UciMessage::Option(o) = parse_line("option name WeightsFile type string default <autodiscover>") else {
-            panic!()
-        };
+        let UciMessage::Option(o) = parse_line("option name WeightsFile type string default <autodiscover>") else { panic!() };
         assert_eq!(o.name, "WeightsFile");
         assert_eq!(o.kind, OptionKind::String { default: "<autodiscover>".into() });
 
-        let UciMessage::Option(o) = parse_line("option name Threads type spin default 0 min 0 max 128") else {
-            panic!()
-        };
+        let UciMessage::Option(o) = parse_line("option name Threads type spin default 0 min 0 max 128") else { panic!() };
         assert_eq!(o.kind, OptionKind::Spin { default: 0.0, min: 0.0, max: 128.0 });
 
         let UciMessage::Option(o) =

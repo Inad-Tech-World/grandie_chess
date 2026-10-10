@@ -4,8 +4,8 @@
 //! alternating colours, and prints the score and the implied rating of the
 //! first level relative to the second level's listed Elo.
 //!
-//! cargo run --release --bin calibrate -- --a leela-3 --b maia-1500 --games 20
-//! cargo run --release --bin calibrate -- --a leela-7 --b stockfish:2000
+//! cargo run --profile perf -p grandie-dev-tools --bin calibrate -- --a leela-3 --b maia-1500 --games 20
+//! cargo run --profile perf -p grandie-dev-tools --bin calibrate -- --a leela-7 --b stockfish:2000
 //!
 //! `stockfish:<elo>` uses Stockfish with UCI_LimitStrength as the anchor.
 //! Options: --lc0 <path> (default: src-tauri/binaries/lc0-<triple>),
@@ -41,7 +41,7 @@ fn parse_args() -> Args {
         b: "maia-1500".into(),
         games: 10,
         max_plies: 300,
-        lc0: PathBuf::from(format!("{}/binaries/lc0-{triple}", env!("CARGO_MANIFEST_DIR"))),
+        lc0: PathBuf::from(format!("{}/../binaries/lc0-{triple}", env!("CARGO_MANIFEST_DIR"))),
         networks: PathBuf::from(format!("{home}/Library/Application Support/com.grandie.chess/networks")),
         stockfish: PathBuf::from(format!(
             "{home}/Library/Application Support/com.grandie.chess/engines/stockfish/stockfish/stockfish-macos-universal"
@@ -75,7 +75,9 @@ async fn player(spec: &str, catalog: &Catalog, args: &Args, settings: &Settings)
     if let Some(elo) = spec.strip_prefix("stockfish:") {
         let elo: u32 = elo.parse().expect("stockfish:<elo>");
         let engine = Engine::spawn(&args.stockfish, &[]).await.expect("Stockfish starts");
-        for (name, value) in [("Threads", "1".to_string()), ("Hash", "16".into()), ("UCI_LimitStrength", "true".into()), ("UCI_Elo", elo.to_string())] {
+        for (name, value) in
+            [("Threads", "1".to_string()), ("Hash", "16".into()), ("UCI_LimitStrength", "true".into()), ("UCI_Elo", elo.to_string())]
+        {
             engine.set_option(name, value).await.unwrap();
         }
         engine.ready(std::time::Duration::from_secs(10)).await.unwrap();
@@ -122,8 +124,7 @@ async fn play(white: &Player, black: &Player, max_plies: usize) -> f64 {
 async fn main() {
     let args = parse_args();
     let catalog = Catalog::load();
-    let mut settings = Settings::default();
-    settings.opponent_variety = true;
+    let settings = Settings { opponent_variety: true, ..Settings::default() };
     let a = player(&args.a, &catalog, &args, &settings).await;
     let b = player(&args.b, &catalog, &args, &settings).await;
     let mut score_a = 0.0;
@@ -132,7 +133,15 @@ async fn main() {
         let white_score = if a_white { play(&a, &b, args.max_plies).await } else { play(&b, &a, args.max_plies).await };
         let s = if a_white { white_score } else { 1.0 - white_score };
         score_a += s;
-        println!("game {:>3}: {} {} -> {}  (running score {:.1}/{})", game + 1, a.id, if a_white { "white" } else { "black" }, s, score_a, game + 1);
+        println!(
+            "game {:>3}: {} {} -> {}  (running score {:.1}/{})",
+            game + 1,
+            a.id,
+            if a_white { "white" } else { "black" },
+            s,
+            score_a,
+            game + 1
+        );
     }
     let pct = score_a / args.games as f64;
     let clamped = pct.clamp(0.03, 0.97);

@@ -55,10 +55,8 @@ mod tests {
 
     #[test]
     fn months_and_filtering() {
-        let urls: Vec<String> = ["2026/07", "2026/08", "2026/09"]
-            .iter()
-            .map(|m| format!("https://api.chess.com/pub/player/x/games/{m}"))
-            .collect();
+        let urls: Vec<String> =
+            ["2026/07", "2026/08", "2026/09"].iter().map(|m| format!("https://api.chess.com/pub/player/x/games/{m}")).collect();
         assert_eq!(archive_month(&urls[1]), Some((2026, 8)));
         // 2026-08-15
         let since = chrono::NaiveDate::from_ymd_opt(2026, 8, 15).unwrap().and_hms_opt(0, 0, 0).unwrap().and_utc().timestamp();

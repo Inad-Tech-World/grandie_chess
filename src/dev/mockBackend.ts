@@ -119,6 +119,7 @@ let settings: Settings = {
   showCoordinates: true,
   animationMs: 0,
   showEvalBar: true,
+  sound: false,
   lichessUsername: null,
   chesscomUsername: null,
   onboardingDone: true,
@@ -814,6 +815,18 @@ Object.assign(handlers, {
       puzzlesSolved: puzzleAttempts.filter((p) => p.solved).length,
     },
     levels: [{ level: "maia-1500", name: "Maia 1500", elo: 1500, games: 3, wins: 2, draws: 0, losses: 1, performance: 1633 }],
+    levelSeries: [
+      {
+        level: "maia-1500",
+        name: "Maia 1500",
+        elo: 1500,
+        points: [
+          { at: 1_790_000_000, rating: 1900 },
+          { at: 1_791_000_000, rating: 1700 },
+          { at: 1_792_000_000, rating: 1633 },
+        ],
+      },
+    ],
     strength: [
       { at: 1_790_000_000, rating: 1450 },
       { at: 1_791_000_000, rating: 1560 },

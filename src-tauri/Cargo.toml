@@ -8,6 +8,10 @@ edition = "2021"
 rust-version = "1.97"
 default-run = "grandie-chess"
 
+[workspace]
+# The fake engine and calibration tool; see dev-tools/Cargo.toml.
+members = ["dev-tools"]
+
 [lib]
 name = "grandie_chess_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
@@ -62,16 +66,6 @@ tempfile = "3"
 [[bin]]
 name = "grandie-chess"
 path = "src/main.rs"
-
-# Scripted UCI engine used by tests (no GPU or network needed).
-[[bin]]
-name = "fake-uci"
-path = "src/bin/fake_uci.rs"
-
-# Plays engine-vs-engine matches to estimate the Elo of each opponent level.
-[[bin]]
-name = "calibrate"
-path = "src/bin/calibrate.rs"
 
 # Optimised but quick to compile: for benchmarks such as
 # `cargo test --profile perf --test db_perf -- --ignored`.

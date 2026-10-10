@@ -60,17 +60,11 @@ impl Engine {
     /// Start the engine and complete the `uci` handshake.
     pub async fn spawn(path: &Path, args: &[String]) -> Result<Arc<Engine>> {
         let mut cmd = Command::new(path);
-        cmd.args(args)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .kill_on_drop(true);
+        cmd.args(args).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(true);
         if let Some(dir) = path.parent() {
             cmd.current_dir(dir);
         }
-        let mut child = cmd
-            .spawn()
-            .map_err(|e| Error::Engine(format!("cannot start {}: {e}", path.display())))?;
+        let mut child = cmd.spawn().map_err(|e| Error::Engine(format!("cannot start {}: {e}", path.display())))?;
         let mut stdin = child.stdin.take().expect("piped stdin");
         let stdout = child.stdout.take().expect("piped stdout");
         let stderr_pipe = child.stderr.take().expect("piped stderr");
@@ -118,9 +112,7 @@ impl Engine {
                     Ok(UciMessage::IdAuthor(a)) => author = Some(a),
                     Ok(UciMessage::Option(o)) => options.push(o),
                     Ok(UciMessage::UciOk) => return Ok(()),
-                    Ok(UciMessage::Exited) | Err(RecvError::Closed) => {
-                        return Err(Error::Engine("engine exited during startup".into()))
-                    }
+                    Ok(UciMessage::Exited) | Err(RecvError::Closed) => return Err(Error::Engine("engine exited during startup".into())),
                     Ok(_) | Err(RecvError::Lagged(_)) => {}
                 }
             }
@@ -136,9 +128,7 @@ impl Engine {
 
         Ok(Arc::new(Engine {
             path: path.to_path_buf(),
-            name: name.unwrap_or_else(|| {
-                path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()
-            }),
+            name: name.unwrap_or_else(|| path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()),
             author,
             options,
             stdin: tokio::sync::Mutex::new(stdin),
@@ -196,9 +186,7 @@ impl Engine {
                 }
             }
         };
-        tokio::time::timeout(timeout, wait)
-            .await
-            .map_err(|_| Error::Engine(format!("{} did not become ready", self.name)))?
+        tokio::time::timeout(timeout, wait).await.map_err(|_| Error::Engine(format!("{} did not become ready", self.name)))?
     }
 
     fn exit_error(&self) -> Error {
@@ -285,11 +273,7 @@ impl Drop for Engine {
 
 /// `position` command for a start FEN and a list of UCI moves.
 pub fn position_command(start_fen: &str, moves: &[String]) -> String {
-    let mut cmd = if start_fen == START_FEN {
-        "position startpos".to_string()
-    } else {
-        format!("position fen {start_fen}")
-    };
+    let mut cmd = if start_fen == START_FEN { "position startpos".to_string() } else { format!("position fen {start_fen}") };
     if !moves.is_empty() {
         cmd.push_str(" moves ");
         cmd.push_str(&moves.join(" "));
@@ -304,10 +288,7 @@ mod tests {
     #[test]
     fn builds_position_commands() {
         assert_eq!(position_command(START_FEN, &[]), "position startpos");
-        assert_eq!(
-            position_command(START_FEN, &["e2e4".into(), "e7e5".into()]),
-            "position startpos moves e2e4 e7e5"
-        );
+        assert_eq!(position_command(START_FEN, &["e2e4".into(), "e7e5".into()]), "position startpos moves e2e4 e7e5");
         let fen = "8/8/4k3/8/8/3K4/8/7R w - - 0 1";
         assert_eq!(position_command(fen, &["h1h6".into()]), format!("position fen {fen} moves h1h6"));
     }

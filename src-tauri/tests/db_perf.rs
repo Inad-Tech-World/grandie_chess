@@ -67,14 +67,18 @@ fn five_thousand_games_search_under_a_second() {
         fen_of(&p)
     };
     let t = Instant::now();
-    let exact = query(&pool, &GameQuery { position: Some(PositionQuery { fen: after_nf3, exact: true }), limit: 200, ..Default::default() }).unwrap();
+    let exact =
+        query(&pool, &GameQuery { position: Some(PositionQuery { fen: after_nf3, exact: true }), limit: 200, ..Default::default() })
+            .unwrap();
     let exact_time = t.elapsed();
     println!("exact search: {} games in {:?}", exact.total, exact_time);
     assert_eq!(exact.total, 5000);
 
     let t = Instant::now();
     // Partial: a white queen on h5 and a black king on e8 at the same time.
-    let partial = query(&pool, &GameQuery { position: Some(PositionQuery { fen: "4k3/8/8/7Q/8/8/8/8".into(), exact: false }), ..Default::default() }).unwrap();
+    let partial =
+        query(&pool, &GameQuery { position: Some(PositionQuery { fen: "4k3/8/8/7Q/8/8/8/8".into(), exact: false }), ..Default::default() })
+            .unwrap();
     let partial_time = t.elapsed();
     println!("partial search: {} games in {:?}", partial.total, partial_time);
 

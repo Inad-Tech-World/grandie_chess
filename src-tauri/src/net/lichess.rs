@@ -18,16 +18,18 @@ pub async fn fetch_user_games(
     client: &reqwest::Client,
     username: &str,
     since_ms: Option<i64>,
+    max: Option<u32>,
     mut progress: impl FnMut(u32, u64),
 ) -> Result<Vec<u8>> {
     if !valid_username(username) {
         return Err(Error::other(format!("\"{username}\" is not a valid Lichess username")));
     }
-    let mut url = format!(
-        "https://lichess.org/api/games/user/{username}?clocks=true&opening=true&evals=false&sort=dateAsc"
-    );
+    let mut url = format!("https://lichess.org/api/games/user/{username}?clocks=true&opening=true&evals=false&sort=dateAsc");
     if let Some(since) = since_ms {
         url.push_str(&format!("&since={since}"));
+    }
+    if let Some(max) = max {
+        url.push_str(&format!("&max={max}"));
     }
     let mut attempt = 0;
     let response = loop {

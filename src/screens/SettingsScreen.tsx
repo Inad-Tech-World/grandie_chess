@@ -69,6 +69,7 @@ export function SettingsScreen() {
               ]}
             />
           </Group>
+          <Switch mb="md" label="Sounds" checked={settings.sound} onChange={(e) => void update({ sound: e.currentTarget.checked })} />
           <Switch
             mb="md"
             label="Show board coordinates"

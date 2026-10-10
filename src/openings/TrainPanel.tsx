@@ -5,6 +5,7 @@ import { Board, type Arrow } from "../board/Board";
 import { commands, notifyError, unwrap, type DrillItem, type Side } from "../lib/api";
 import { START_FEN } from "../lib/tree";
 import { primePositionInfo, usePositionInfo } from "../lib/usePositionInfo";
+import { playSound } from "../lib/sounds";
 import { useSettings } from "../stores/settings";
 
 type Phase = "idle" | "replay" | "waiting" | "correct" | "wrong" | "done";
@@ -89,6 +90,7 @@ export function TrainPanel({ size, onDone }: Props) {
     const ok = item.expected.some((e) => e.uci === r.data.uci);
     if (ok) {
       const firstTry = phase === "waiting";
+      playSound("correct");
       setFen(r.data.position.fen);
       setLastMove(r.data.uci);
       setPhase("correct");
@@ -101,6 +103,7 @@ export function TrainPanel({ size, onDone }: Props) {
       return true;
     }
     setMistakes((m) => m + 1);
+    playSound("wrong");
     setPhase("wrong");
     if (mistakes === 0) {
       await commands.repertoireGrade(item.color, item.key, "again");

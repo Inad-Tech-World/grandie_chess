@@ -75,10 +75,7 @@ impl Registry {
 
     /// All engines, with the bundled lc0 always first.
     pub fn list(&self) -> Vec<EngineConfig> {
-        let mut file: EnginesFile = std::fs::read(&self.path)
-            .ok()
-            .and_then(|b| serde_json::from_slice(&b).ok())
-            .unwrap_or_default();
+        let mut file: EnginesFile = std::fs::read(&self.path).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
         if !file.engines.iter().any(|e| e.id == LC0_ID) {
             file.engines.insert(0, EngineConfig::lc0());
         }
@@ -86,10 +83,7 @@ impl Registry {
     }
 
     pub fn get(&self, id: &str) -> Result<EngineConfig> {
-        self.list()
-            .into_iter()
-            .find(|e| e.id == id)
-            .ok_or_else(|| Error::NotFound(format!("unknown engine: {id}")))
+        self.list().into_iter().find(|e| e.id == id).ok_or_else(|| Error::NotFound(format!("unknown engine: {id}")))
     }
 
     fn save(&self, engines: Vec<EngineConfig>) -> Result<()> {

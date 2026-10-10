@@ -101,21 +101,32 @@ pub struct ReviewResult {
 }
 
 /// Evaluate one position (terminal positions are scored by the rules).
-async fn evaluate(
-    engine: &Engine,
-    start_fen: &str,
-    moves: &[String],
-    pos: &Chess,
-    ply: u32,
-    go: &str,
-) -> Result<PositionEval> {
+async fn evaluate(engine: &Engine, start_fen: &str, moves: &[String], pos: &Chess, ply: u32, go: &str) -> Result<PositionEval> {
     let fen = fen_of(pos);
     if pos.is_checkmate() {
         let white_win = if pos.turn() == Color::White { 0.0 } else { 100.0 };
-        return Ok(PositionEval { ply, fen, white_win, score: Some(Score::Mate(0)), best: None, best_san: None, line: vec![], second_white_win: None });
+        return Ok(PositionEval {
+            ply,
+            fen,
+            white_win,
+            score: Some(Score::Mate(0)),
+            best: None,
+            best_san: None,
+            line: vec![],
+            second_white_win: None,
+        });
     }
     if pos.is_game_over() {
-        return Ok(PositionEval { ply, fen, white_win: 50.0, score: Some(Score::Cp(0)), best: None, best_san: None, line: vec![], second_white_win: None });
+        return Ok(PositionEval {
+            ply,
+            fen,
+            white_win: 50.0,
+            score: Some(Score::Cp(0)),
+            best: None,
+            best_san: None,
+            line: vec![],
+            second_white_win: None,
+        });
     }
     let result = engine.search(&position_command(start_fen, moves), go, |_| {}).await?;
     let top = result.lines.first().ok_or_else(|| Error::Engine("engine returned no evaluation".into()))?;
@@ -215,10 +226,7 @@ pub fn summarise(start_fen: &str, moves: &[String], evals: Vec<PositionEval>, en
     };
 
     // Key moments: mistakes and blunders by size, then brilliant moves.
-    let mut errors: Vec<&MoveReview> = reviews
-        .iter()
-        .filter(|r| matches!(r.class, MoveClass::Mistake | MoveClass::Blunder))
-        .collect();
+    let mut errors: Vec<&MoveReview> = reviews.iter().filter(|r| matches!(r.class, MoveClass::Mistake | MoveClass::Blunder)).collect();
     errors.sort_by(|a, b| (b.win_before - b.win_after).partial_cmp(&(a.win_before - a.win_after)).unwrap_or(std::cmp::Ordering::Equal));
     let mut key_moments: Vec<u32> = errors.iter().take(8).map(|r| r.ply).collect();
     key_moments.extend(reviews.iter().filter(|r| r.class == MoveClass::Brilliant).map(|r| r.ply));

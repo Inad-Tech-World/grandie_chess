@@ -12,28 +12,28 @@ use std::sync::atomic::AtomicBool;
 
 use crate::analysis::live::{to_white_line, AnalysisRequest};
 use crate::analysis::review::{self, ReviewDepth, ReviewResult};
-use crate::engine::benchmark::{self, BackendResult};
-use crate::engine::registry::{EngineConfig, EngineKind, OptionValue, Registry, LC0_ID};
-use crate::engine::catalog::{network_path, NetworkEntry, NetworkKind, OpponentLevel};
-use crate::engine::process::position_command;
-use crate::error::{Error, Result};
 use crate::db::explorer::{ExplorerFilter, ExplorerResult};
 use crate::db::games::{self as dbgames, DbGame, DbStats, GamePage, GameQuery};
-use crate::game::openings::{OpeningBook, OpeningName};
-use crate::game::position::Side;
-use crate::training::progress::ProgressSummary;
-use crate::training::puzzles::{self, MoveVerdict, Puzzle, PuzzleImportFilter, PuzzleResult, ThemeCount};
-use crate::training::repertoire::{self, DrillItem, RepMove, RepertoireStats};
-use crate::training::srs::{CardState, Grade};
 use crate::db::import::{self as dbimport, ImportSummary};
+use crate::engine::benchmark::{self, BackendResult};
+use crate::engine::catalog::{network_path, NetworkEntry, NetworkKind, OpponentLevel};
+use crate::engine::process::position_command;
+use crate::engine::registry::{EngineConfig, EngineKind, OptionValue, Registry, LC0_ID};
+use crate::error::{Error, Result};
 use crate::events::{DownloadProgress, ImportProgress, ReviewProgress, TauriAnalysisSink, TauriPlayObserver};
+use crate::game::openings::{OpeningBook, OpeningName};
 use crate::game::pgn::{parse_pgn, read_pgn_file, write_pgn, PgnParseResult};
+use crate::game::position::Side;
 use crate::game::position::{apply_uci, parse_fen, position_info, AppliedMove, PositionInfo};
 use crate::game::session::{PlayContext, PlayManager, PlaySetup, PlaySnapshot};
 use crate::game::tree::GameTree;
 use crate::net::download::{download_file, looks_like_network};
 use crate::settings::Settings;
 use crate::state::AppState;
+use crate::training::progress::ProgressSummary;
+use crate::training::puzzles::{self, MoveVerdict, Puzzle, PuzzleImportFilter, PuzzleResult, ThemeCount};
+use crate::training::repertoire::{self, DrillItem, RepMove, RepertoireStats};
+use crate::training::srs::{CardState, Grade};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
@@ -122,14 +122,7 @@ pub async fn network_download(app: AppHandle, state: State<'_, AppState>, id: St
         return Err(Error::other(format!("{} is already downloading", def.name)));
     }
     let emit = |received: u64, total: Option<u64>, done: bool, error: Option<String>| {
-        let _ = DownloadProgress {
-            id: id.clone(),
-            received: received as f64,
-            total: total.map(|t| t as f64),
-            done,
-            error,
-        }
-        .emit(&app);
+        let _ = DownloadProgress { id: id.clone(), received: received as f64, total: total.map(|t| t as f64), done, error }.emit(&app);
     };
     let result = download_file(&state.http, &def.url, &dest, Some(def.size as u64), |r, t| emit(r, t, false, None)).await;
     state.end_download(&id);
@@ -404,11 +397,7 @@ fn find_executable(dir: &std::path::Path, prefix: &str) -> Option<PathBuf> {
             let path = entry.path();
             if path.is_dir() {
                 stack.push(path);
-            } else if path
-                .file_name()
-                .and_then(|n| n.to_str())
-                .is_some_and(|n| n.starts_with(prefix) && !n.contains('.'))
-            {
+            } else if path.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.starts_with(prefix) && !n.contains('.')) {
                 return Some(path);
             }
         }
@@ -504,9 +493,7 @@ pub async fn review_check_move(state: State<'_, AppState>, fen: String, uci: Str
         }
     } else {
         let engine = state.helper_engine().await?;
-        let result = engine
-            .search(&format!("position fen {}", applied.position.fen), "go nodes 400", |_| {})
-            .await?;
+        let result = engine.search(&format!("position fen {}", applied.position.fen), "go nodes 400", |_| {}).await?;
         let top = result.top().ok_or_else(|| Error::Engine("no evaluation".into()))?;
         let line = to_white_line(top, &after);
         return Ok(MoveCheck {
@@ -558,7 +545,8 @@ pub fn db_save_review(state: State<'_, AppState>, game_id: i32, review: ReviewRe
 }
 
 fn emit_import(app: &AppHandle, job_id: &str, phase: &str, s: &ImportSummary, bytes: u64) {
-    let _ = ImportProgress { job_id: job_id.into(), phase: phase.into(), seen: s.seen, imported: s.imported, bytes: bytes as f64 }.emit(app);
+    let _ =
+        ImportProgress { job_id: job_id.into(), phase: phase.into(), seen: s.seen, imported: s.imported, bytes: bytes as f64 }.emit(app);
 }
 
 /// Import PGN files into the database.
@@ -602,7 +590,7 @@ async fn import_bytes(app: &AppHandle, state: &AppState, job_id: &str, bytes: Ve
 pub async fn db_import_lichess(app: AppHandle, state: State<'_, AppState>, job_id: String, username: String) -> Result<ImportSummary> {
     let username = username.trim().to_string();
     let since = dbgames::last_sync(&*state.db.get()?, "lichess", &username)?;
-    let bytes = crate::net::lichess::fetch_user_games(&state.http, &username, since.map(|s| (s + 1) * 1000), |games, bytes| {
+    let bytes = crate::net::lichess::fetch_user_games(&state.http, &username, since.map(|s| (s + 1) * 1000), None, |games, bytes| {
         emit_import(&app, &job_id, "Downloading from Lichess", &ImportSummary { seen: games, ..Default::default() }, bytes)
     })
     .await?;
@@ -654,7 +642,8 @@ pub fn db_import_grandie(state: State<'_, AppState>) -> Result<ImportSummary> {
             continue;
         }
         let name = path.file_name().unwrap().to_string_lossy().into_owned();
-        let exists: bool = tx.query_row("SELECT EXISTS (SELECT 1 FROM games WHERE source = 'grandie' AND source_id = ?1)", [&name], |r| r.get(0))?;
+        let exists: bool =
+            tx.query_row("SELECT EXISTS (SELECT 1 FROM games WHERE source = 'grandie' AND source_id = ?1)", [&name], |r| r.get(0))?;
         if exists {
             continue;
         }
@@ -700,7 +689,8 @@ pub async fn explorer_lichess(
     speeds: Vec<String>,
     ratings: Vec<u32>,
 ) -> Result<ExplorerResult> {
-    let token = crate::secrets::lichess_token()?.ok_or_else(|| Error::NotFound("Add a Lichess API token in Settings to use the Lichess explorer.".into()))?;
+    let token = crate::secrets::lichess_token()?
+        .ok_or_else(|| Error::NotFound("Add a Lichess API token in Settings to use the Lichess explorer.".into()))?;
     crate::net::explorer::explore(&state.http, &state.explorer_cache, &token, &db, &fen, &speeds, &ratings).await
 }
 
@@ -807,7 +797,8 @@ pub async fn puzzles_download(app: AppHandle, state: State<'_, AppState>, filter
     let archive = state.paths.data_dir.join("lichess_db_puzzle.csv.zst");
     let result: Result<u32> = async {
         download_file(&state.http, puzzles::PUZZLE_DB_URL, &archive, None, |r, t| {
-            let _ = DownloadProgress { id: id.clone(), received: r as f64, total: t.map(|t| t as f64), done: false, error: None }.emit(&app);
+            let _ =
+                DownloadProgress { id: id.clone(), received: r as f64, total: t.map(|t| t as f64), done: false, error: None }.emit(&app);
         })
         .await?;
         let pool = state.puzzles.clone();
@@ -834,7 +825,9 @@ pub async fn puzzles_download(app: AppHandle, state: State<'_, AppState>, filter
     .await;
     let _ = std::fs::remove_file(&archive);
     state.end_download(&id);
-    let _ = DownloadProgress { id: id.clone(), received: 0.0, total: None, done: true, error: result.as_ref().err().map(|e| e.to_string()) }.emit(&app);
+    let _ =
+        DownloadProgress { id: id.clone(), received: 0.0, total: None, done: true, error: result.as_ref().err().map(|e| e.to_string()) }
+            .emit(&app);
     result
 }
 

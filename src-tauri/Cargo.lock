@@ -1730,6 +1730,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "grandie-dev-tools"
+version = "0.1.0"
+dependencies = [
+ "grandie-chess",
+ "shakmaty",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
 name = "gtk"
 version = "0.18.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"

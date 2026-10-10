@@ -138,17 +138,11 @@ impl Catalog {
     }
 
     pub fn network(&self, id: &str) -> Result<&NetworkDef> {
-        self.networks
-            .iter()
-            .find(|n| n.id == id)
-            .ok_or_else(|| Error::NotFound(format!("unknown network: {id}")))
+        self.networks.iter().find(|n| n.id == id).ok_or_else(|| Error::NotFound(format!("unknown network: {id}")))
     }
 
     pub fn level(&self, id: &str) -> Result<&OpponentLevel> {
-        self.levels
-            .iter()
-            .find(|l| l.id == id)
-            .ok_or_else(|| Error::NotFound(format!("unknown opponent level: {id}")))
+        self.levels.iter().find(|l| l.id == id).ok_or_else(|| Error::NotFound(format!("unknown opponent level: {id}")))
     }
 
     pub fn entries(&self, networks_dir: &Path) -> Vec<NetworkEntry> {
@@ -156,11 +150,7 @@ impl Catalog {
             .iter()
             .map(|def| {
                 let path = network_path(networks_dir, &def.id);
-                NetworkEntry {
-                    installed: path.exists(),
-                    path: path.to_string_lossy().into_owned(),
-                    def: def.clone(),
-                }
+                NetworkEntry { installed: path.exists(), path: path.to_string_lossy().into_owned(), def: def.clone() }
             })
             .collect()
     }

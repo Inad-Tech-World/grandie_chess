@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Button, Group, Image, Modal, Progress, Stack, Stepper, Text, TextInput, Title } from "@mantine/core";
+import { notifications } from "@mantine/notifications";
 import { commands, notifyError, unwrap, type BackendResult } from "../lib/api";
 import { formatBytes } from "../lib/format";
 import { downloadFraction, useDownloads } from "../stores/downloads";
@@ -16,6 +17,8 @@ export function Onboarding() {
   const [busy, setBusy] = useState(false);
   const [bench, setBench] = useState<BackendResult | null>(null);
   const [name, setName] = useState("");
+  const [lichess, setLichess] = useState("");
+  const [chesscom, setChesscom] = useState("");
 
   useEffect(() => {
     void refresh();
@@ -54,7 +57,23 @@ export function Onboarding() {
   }
 
   async function finish() {
-    await update({ onboardingDone: true, ...(name.trim() ? { playerName: name.trim() } : {}) });
+    await update({
+      onboardingDone: true,
+      ...(name.trim() ? { playerName: name.trim() } : {}),
+      lichessUsername: lichess.trim() || null,
+      chesscomUsername: chesscom.trim() || null,
+    });
+    // Bring in the user's online games in the background.
+    const imports: [string, () => ReturnType<typeof commands.dbImportLichess>][] = [];
+    if (lichess.trim()) imports.push(["Lichess", () => commands.dbImportLichess("onboarding-lichess", lichess.trim())]);
+    if (chesscom.trim()) imports.push(["Chess.com", () => commands.dbImportChesscom("onboarding-chesscom", chesscom.trim())]);
+    for (const [site, run] of imports) {
+      void run().then((r) =>
+        r.status === "ok"
+          ? notifications.show({ color: "green", title: `${site} games imported`, message: `${r.data.imported} games added to your database.` })
+          : notifyError(`${site} import failed`, r.error),
+      );
+    }
   }
 
   return (
@@ -139,6 +158,13 @@ export function Onboarding() {
       {step === 3 && (
         <Stack>
           <TextInput label="What should Grandie call you?" description="Used in your saved games." placeholder="You" value={name} onChange={(e) => setName(e.currentTarget.value)} autoFocus />
+          <Group grow>
+            <TextInput label="Lichess username" description="Optional" value={lichess} onChange={(e) => setLichess(e.currentTarget.value)} />
+            <TextInput label="Chess.com username" description="Optional" value={chesscom} onChange={(e) => setChesscom(e.currentTarget.value)} />
+          </Group>
+          <Text size="xs" c="dimmed">
+            With a username, Grandie imports your games so you can review them, find your weak openings and build your repertoire.
+          </Text>
           <Group justify="flex-end">
             <Button onClick={() => void finish()}>Start playing</Button>
           </Group>

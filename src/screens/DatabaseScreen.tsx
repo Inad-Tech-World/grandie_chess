@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Badge, Button, CloseButton, Group, Select, Switch, Text, TextInput, Title, Tooltip } from "@mantine/core";
+import { Badge, Button, CloseButton, Group, NumberInput, Select, Switch, Text, TextInput, Title, Tooltip } from "@mantine/core";
 import { useDebouncedValue } from "@mantine/hooks";
 import { modals } from "@mantine/modals";
 import { IconChessBishop, IconDatabaseImport, IconSearch, IconTrash } from "@tabler/icons-react";
@@ -39,6 +39,8 @@ export function DatabaseScreen() {
     eco: null,
     dateFrom: null,
     dateTo: null,
+    minRating: null,
+    maxRating: null,
     position: null,
     sort: null,
     desc: true,
@@ -182,6 +184,8 @@ export function DatabaseScreen() {
         <TextInput size="xs" w={70} placeholder="ECO" value={filters.eco ?? ""} onChange={(e) => set({ eco: e.currentTarget.value || null })} aria-label="ECO code" />
         <TextInput size="xs" type="date" w={130} value={filters.dateFrom ?? ""} onChange={(e) => set({ dateFrom: e.currentTarget.value || null })} aria-label="From date" />
         <TextInput size="xs" type="date" w={130} value={filters.dateTo ?? ""} onChange={(e) => set({ dateTo: e.currentTarget.value || null })} aria-label="To date" />
+        <NumberInput size="xs" w={92} placeholder="Rating ≥" min={0} max={3500} step={100} value={filters.minRating ?? ""} onChange={(v) => set({ minRating: v === "" ? null : Number(v) })} aria-label="Minimum rating" hideControls />
+        <NumberInput size="xs" w={92} placeholder="Rating ≤" min={0} max={3500} step={100} value={filters.maxRating ?? ""} onChange={(v) => set({ maxRating: v === "" ? null : Number(v) })} aria-label="Maximum rating" hideControls />
         <Switch size="xs" label="Only my games" checked={filters.onlyMine} onChange={(e) => set({ onlyMine: e.currentTarget.checked })} />
         {filters.position ? (
           <Badge size="lg" variant="light" rightSection={<CloseButton size="xs" onClick={() => set({ position: null })} aria-label="Clear position search" />}>

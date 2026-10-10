@@ -25,6 +25,7 @@ import { describeOutcome, formatTimeControl } from "../lib/format";
 import { usePlay } from "../stores/play";
 import { useSettings } from "../stores/settings";
 import { grandieGameId, openAnalysisFromPgn, savePgnText } from "../lib/actions";
+import { playSound, soundForSan } from "../lib/sounds";
 import { useApp, newId } from "../stores/app";
 
 export function PlayScreen({ sessionId }: { sessionId: number }) {
@@ -65,9 +66,21 @@ export function PlayScreen({ sessionId }: { sessionId: number }) {
     ["f", () => setView(sessionId, { orientation: orientation === "white" ? "black" : "white" })],
   ]);
 
+  const outcomeReason = snap?.outcome?.reason;
+  // Sounds for each new move and for the end of the game.
+  const moveCount = snap?.moves.length ?? 0;
+  const lastSan = snap?.moves[moveCount - 1]?.san;
+  const heard = useRef<number | null>(null);
+  useEffect(() => {
+    if (heard.current !== null && moveCount > heard.current) playSound(soundForSan(lastSan));
+    heard.current = moveCount;
+  }, [moveCount, lastSan]);
+  useEffect(() => {
+    if (outcomeReason && outcomeReason !== "aborted") playSound("end");
+  }, [outcomeReason]);
+
   // When a game ends, open its review automatically (once).
   const reviewOpened = useRef(false);
-  const outcomeReason = snap?.outcome?.reason;
   useEffect(() => {
     if (!snap || !outcomeReason || outcomeReason === "aborted" || reviewOpened.current || snap.moves.length < 4) return;
     reviewOpened.current = true;

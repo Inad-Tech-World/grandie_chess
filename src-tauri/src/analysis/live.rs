@@ -141,10 +141,7 @@ impl AnalysisManager {
         }
         engine.ready(crate::engine::lc0::READY_TIMEOUT).await?;
         let token = Arc::new(AtomicU64::new(0));
-        slots.insert(
-            engine_id.to_string(),
-            Slot { key: launch.key.clone(), engine: engine.clone(), token: token.clone() },
-        );
+        slots.insert(engine_id.to_string(), Slot { key: launch.key.clone(), engine: engine.clone(), token: token.clone() });
         Ok((engine, token))
     }
 

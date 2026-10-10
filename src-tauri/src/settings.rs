@@ -30,6 +30,8 @@ pub struct Settings {
     pub show_coordinates: bool,
     pub animation_ms: u32,
     pub show_eval_bar: bool,
+    /// Move, capture and game-end sounds.
+    pub sound: bool,
     pub lichess_username: Option<String>,
     pub chesscom_username: Option<String>,
     pub onboarding_done: bool,
@@ -59,6 +61,7 @@ impl Default for Settings {
             show_coordinates: true,
             animation_ms: 200,
             show_eval_bar: true,
+            sound: true,
             lichess_username: None,
             chesscom_username: None,
             onboarding_done: false,
@@ -93,9 +96,7 @@ mod tests {
     fn round_trips_and_tolerates_missing_fields() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("settings.json");
-        let mut s = Settings::default();
-        s.player_name = "Ada".into();
-        s.backend = Some("metal".into());
+        let s = Settings { player_name: "Ada".into(), backend: Some("metal".into()), ..Settings::default() };
         s.save(&path).unwrap();
         let loaded = Settings::load(&path);
         assert_eq!(loaded.player_name, "Ada");

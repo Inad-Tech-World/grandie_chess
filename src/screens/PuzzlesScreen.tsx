@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, Anchor, Badge, Button, Card, Group, Progress, Select, Stack, Text, Title } from "@mantine/core";
+import { Alert, Anchor, Badge, Button, Card, Group, Progress, SegmentedControl, Select, Stack, Text, Title } from "@mantine/core";
 import { useHotkeys } from "@mantine/hooks";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { IconBulb, IconCheck, IconDownload, IconPlayerTrackNext, IconRefresh, IconX } from "@tabler/icons-react";
 import { Board, useBoardSize, type Arrow } from "../board/Board";
 import { commands, events, notifyError, unwrap, type ImportProgress, type Puzzle, type PuzzleInfo, type Side } from "../lib/api";
 import { primePositionInfo, usePositionInfo } from "../lib/usePositionInfo";
+import { playSound, soundForSan } from "../lib/sounds";
 import { formatBytes } from "../lib/format";
 import { downloadFraction, useDownloads } from "../stores/downloads";
 import { useSettings } from "../stores/settings";
@@ -23,6 +24,7 @@ export function PuzzlesScreen() {
   const [info, setInfo] = useState<PuzzleInfo | null>(null);
   const [themes, setThemes] = useState<{ value: string; label: string }[]>([]);
   const [theme, setTheme] = useState<string | null>(null);
+  const [difficulty, setDifficulty] = useState<"easier" | "normal" | "harder">("normal");
   const [puzzle, setPuzzle] = useState<Puzzle | null>(null);
   const [fen, setFen] = useState<string>("");
   const [lastMove, setLastMove] = useState<string | null>(null);
@@ -54,6 +56,7 @@ export function PuzzlesScreen() {
   const apply = useCallback(async (from: string, uci: string) => {
     const r = await unwrap(commands.chessApplyMove(from, uci));
     primePositionInfo(r.position);
+    playSound(soundForSan(r.san));
     setFen(r.position.fen);
     setLastMove(r.uci);
     return r.position.fen;
@@ -65,7 +68,9 @@ export function PuzzlesScreen() {
     setArrows([]);
     recorded.current = false;
     try {
-      const p = await unwrap(commands.puzzleNext(theme, null));
+      const offset = { easier: -200, normal: 0, harder: 200 }[difficulty];
+      const target = offset && info ? (info.rating.rating ?? 1500) + offset : null;
+      const p = await unwrap(commands.puzzleNext(theme, target));
       if (!p) {
         notifyError("No puzzle found", "Try another theme.");
         return;
@@ -81,7 +86,7 @@ export function PuzzlesScreen() {
     } catch (e) {
       notifyError("Could not load a puzzle", e);
     }
-  }, [theme, apply]);
+  }, [theme, difficulty, info, apply]);
 
   useEffect(() => {
     if (info && info.count > 0 && !puzzle) void load();
@@ -102,6 +107,7 @@ export function PuzzlesScreen() {
     const verdict = await commands.puzzleCheck(puzzle.id, index, uci);
     if (verdict.status !== "ok") return false;
     if (!verdict.data.correct) {
+      playSound("wrong");
       setStatus("wrong");
       void finish(false);
       return false;
@@ -109,6 +115,7 @@ export function PuzzlesScreen() {
     const after = await apply(fen, uci);
     setArrows([]);
     if (verdict.data.done) {
+      playSound("correct");
       setStatus(recorded.current ? "failed" : "solved");
       void finish(true);
       return true;
@@ -270,6 +277,20 @@ export function PuzzlesScreen() {
             setPuzzle(null);
           }}
           aria-label="Puzzle theme"
+        />
+        <SegmentedControl
+          size="xs"
+          value={difficulty}
+          onChange={(v) => {
+            setDifficulty(v as "easier" | "normal" | "harder");
+            setPuzzle(null);
+          }}
+          data={[
+            { value: "easier", label: "Easier" },
+            { value: "normal", label: "At my level" },
+            { value: "harder", label: "Harder" },
+          ]}
+          aria-label="Difficulty"
         />
         <Alert
           variant="light"

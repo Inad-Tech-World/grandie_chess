@@ -68,22 +68,14 @@ pub fn install<R: Runtime>(app: &App<R>) -> tauri::Result<()> {
         .fullscreen()
         .build()?;
 
-    let window_menu = SubmenuBuilder::new(app, "Window")
-        .minimize()
-        .maximize()
-        .separator()
-        .close_window()
-        .bring_all_to_front()
-        .build()?;
+    let window_menu = SubmenuBuilder::new(app, "Window").minimize().maximize().separator().close_window().bring_all_to_front().build()?;
 
     let help_menu = SubmenuBuilder::new(app, "Help")
         .item(&item("help_shortcuts", "Keyboard Shortcuts", Some("CmdOrCtrl+/"))?)
         .item(&item("help_credits", "Credits and Licences", None)?)
         .build()?;
 
-    let menu = MenuBuilder::new(app)
-        .items(&[&app_menu, &file_menu, &edit_menu, &view_menu, &window_menu, &help_menu])
-        .build()?;
+    let menu = MenuBuilder::new(app).items(&[&app_menu, &file_menu, &edit_menu, &view_menu, &window_menu, &help_menu]).build()?;
     app.set_menu(menu)?;
 
     app.on_menu_event(|handle, event| {

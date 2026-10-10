@@ -24,8 +24,7 @@ pub struct BackendResult {
 }
 
 pub fn candidates() -> Vec<(String, Option<String>)> {
-    let mut list: Vec<(String, Option<String>)> =
-        (0..3).map(|gpu| ("metal".to_string(), Some(format!("gpu={gpu}")))).collect();
+    let mut list: Vec<(String, Option<String>)> = (0..3).map(|gpu| ("metal".to_string(), Some(format!("gpu={gpu}")))).collect();
     list.push(("blas".into(), None));
     list
 }
@@ -43,13 +42,8 @@ pub async fn run_one(lc0: &Path, weights: &Path, backend: &str, opts: Option<&st
     if let Some(o) = opts {
         cmd.arg(format!("--backend-opts={o}"));
     }
-    let mut result = BackendResult {
-        backend: backend.to_string(),
-        backend_opts: opts.map(str::to_string),
-        device: None,
-        nps: 0.0,
-        error: None,
-    };
+    let mut result =
+        BackendResult { backend: backend.to_string(), backend_opts: opts.map(str::to_string), device: None, nps: 0.0, error: None };
     let output = match tokio::time::timeout(Duration::from_secs(180), cmd.output()).await {
         Ok(Ok(o)) => o,
         Ok(Err(e)) => {

@@ -53,10 +53,7 @@ impl Visitor for TreeVisitor {
     }
 
     fn tag(&mut self, tags: &mut Self::Tags, name: &[u8], value: RawTag<'_>) -> ControlFlow<Self::Output> {
-        tags.push(PgnHeader {
-            name: String::from_utf8_lossy(name).into_owned(),
-            value: value.decode_utf8_lossy().into_owned(),
-        });
+        tags.push(PgnHeader { name: String::from_utf8_lossy(name).into_owned(), value: value.decode_utf8_lossy().into_owned() });
         ControlFlow::Continue(())
     }
 
@@ -268,15 +265,8 @@ pub fn format_clock(ms: f64) -> String {
     }
 }
 
-const ROSTER: [(&str, &str); 7] = [
-    ("Event", "?"),
-    ("Site", "?"),
-    ("Date", "????.??.??"),
-    ("Round", "?"),
-    ("White", "?"),
-    ("Black", "?"),
-    ("Result", "*"),
-];
+const ROSTER: [(&str, &str); 7] =
+    [("Event", "?"), ("Site", "?"), ("Date", "????.??.??"), ("Round", "?"), ("White", "?"), ("Black", "?"), ("Result", "*")];
 
 fn escape_tag(v: &str) -> String {
     v.replace('\\', "\\\\").replace('"', "\\\"")

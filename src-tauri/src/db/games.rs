@@ -72,6 +72,9 @@ pub struct GameQuery {
     /// Inclusive bounds, "YYYY-MM-DD".
     pub date_from: Option<String>,
     pub date_to: Option<String>,
+    /// Bounds on the game's average rating (of the players with a rating).
+    pub min_rating: Option<i32>,
+    pub max_rating: Option<i32>,
     pub position: Option<PositionQuery>,
     pub sort: Option<SortColumn>,
     pub desc: bool,
@@ -149,7 +152,10 @@ fn filters(q: &GameQuery) -> (String, Vec<Value>) {
     let mut clauses: Vec<String> = Vec::new();
     let mut args: Vec<Value> = Vec::new();
     if let Some(text) = q.text.as_deref().map(str::trim).filter(|t| !t.is_empty()) {
-        clauses.push("(g.white LIKE ?1 OR g.black LIKE ?1 OR g.event LIKE ?1 OR g.opening LIKE ?1 OR g.eco LIKE ?1)".replace("?1", &format!("?{}", args.len() + 1)));
+        clauses.push(
+            "(g.white LIKE ?1 OR g.black LIKE ?1 OR g.event LIKE ?1 OR g.opening LIKE ?1 OR g.eco LIKE ?1)"
+                .replace("?1", &format!("?{}", args.len() + 1)),
+        );
         args.push(Value::Text(format!("%{text}%")));
     }
     if q.only_mine || q.color.is_some() || q.outcome.is_some() {
@@ -160,8 +166,12 @@ fn filters(q: &GameQuery) -> (String, Vec<Value>) {
         args.push(Value::Text(if c == Side::White { "white" } else { "black" }.into()));
     }
     match q.outcome {
-        Some(UserOutcome::Win) => clauses.push("((g.user_color = 'white' AND g.result = '1-0') OR (g.user_color = 'black' AND g.result = '0-1'))".into()),
-        Some(UserOutcome::Loss) => clauses.push("((g.user_color = 'white' AND g.result = '0-1') OR (g.user_color = 'black' AND g.result = '1-0'))".into()),
+        Some(UserOutcome::Win) => {
+            clauses.push("((g.user_color = 'white' AND g.result = '1-0') OR (g.user_color = 'black' AND g.result = '0-1'))".into())
+        }
+        Some(UserOutcome::Loss) => {
+            clauses.push("((g.user_color = 'white' AND g.result = '0-1') OR (g.user_color = 'black' AND g.result = '1-0'))".into())
+        }
         Some(UserOutcome::Draw) => clauses.push("g.result = '1/2-1/2'".into()),
         None => {}
     }
@@ -184,6 +194,15 @@ fn filters(q: &GameQuery) -> (String, Vec<Value>) {
     if let Some(t) = q.date_to.as_deref().and_then(|d| date_to_secs(d, true)) {
         clauses.push(format!("g.played_at <= ?{}", args.len() + 1));
         args.push(Value::Integer(t));
+    }
+    const AVG_RATING: &str = "((COALESCE(g.white_elo, g.black_elo) + COALESCE(g.black_elo, g.white_elo)) / 2.0)";
+    if let Some(r) = q.min_rating {
+        clauses.push(format!("{AVG_RATING} >= ?{}", args.len() + 1));
+        args.push(Value::Integer(r as i64));
+    }
+    if let Some(r) = q.max_rating {
+        clauses.push(format!("{AVG_RATING} <= ?{}", args.len() + 1));
+        args.push(Value::Integer(r as i64));
     }
     let sql = if clauses.is_empty() { String::new() } else { format!("WHERE {}", clauses.join(" AND ")) };
     (sql, args)
@@ -277,9 +296,8 @@ pub fn stats(pool: &DbPool) -> Result<DbStats> {
     let conn = pool.get()?;
     let count = |sql: &str| conn.query_row(sql, [], |r| r.get::<_, i64>(0)).map(|n| n as u32);
     let mut stmt = conn.prepare("SELECT source, COUNT(*) FROM games GROUP BY source ORDER BY COUNT(*) DESC")?;
-    let sources = stmt
-        .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)? as u32)))?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
+    let sources =
+        stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)? as u32)))?.collect::<rusqlite::Result<Vec<_>>>()?;
     Ok(DbStats {
         games: count("SELECT COUNT(*) FROM games")?,
         mine: count("SELECT COUNT(*) FROM games WHERE user_color IS NOT NULL")?,
@@ -320,11 +338,9 @@ pub fn save_review(pool: &DbPool, game_id: i32, review: &ReviewResult) -> Result
 
 pub fn last_sync(conn: &Connection, source: &str, username: &str) -> Result<Option<i64>> {
     Ok(conn
-        .query_row(
-            "SELECT last_sync FROM accounts WHERE source = ?1 AND username = ?2 COLLATE NOCASE",
-            params![source, username],
-            |r| r.get(0),
-        )
+        .query_row("SELECT last_sync FROM accounts WHERE source = ?1 AND username = ?2 COLLATE NOCASE", params![source, username], |r| {
+            r.get(0)
+        })
         .optional()?
         .flatten())
 }
@@ -371,8 +387,14 @@ mod tests {
         let sorted = query(&pool, &GameQuery { sort: Some(SortColumn::WhiteElo), desc: true, limit: 2, ..Default::default() }).unwrap();
         assert_eq!(sorted.rows.len(), 2);
         assert!(sorted.rows[0].white_elo >= sorted.rows[1].white_elo);
-        let range = query(&pool, &GameQuery { date_from: Some("2026-02-01".into()), date_to: Some("2026-03-31".into()), ..Default::default() }).unwrap();
+        let range =
+            query(&pool, &GameQuery { date_from: Some("2026-02-01".into()), date_to: Some("2026-03-31".into()), ..Default::default() })
+                .unwrap();
         assert_eq!(range.total, 2);
+        let masters = query(&pool, &GameQuery { min_rating: Some(2000), ..Default::default() }).unwrap();
+        assert_eq!(masters.total, 1);
+        let club = query(&pool, &GameQuery { min_rating: Some(1600), max_rating: Some(1700), ..Default::default() }).unwrap();
+        assert_eq!(club.total, 3);
     }
 
     #[test]

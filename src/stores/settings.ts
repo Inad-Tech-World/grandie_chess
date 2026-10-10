@@ -18,6 +18,7 @@ export const DEFAULT_SETTINGS: FullSettings = {
   showCoordinates: true,
   animationMs: 200,
   showEvalBar: true,
+  sound: true,
   lichessUsername: null,
   chesscomUsername: null,
   onboardingDone: false,

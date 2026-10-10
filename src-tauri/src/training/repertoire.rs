@@ -146,9 +146,8 @@ pub fn set_comment(conn: &Connection, id: i32, comment: Option<&str>) -> Result<
 
 /// (id, parent_hash, child_hash, uci) for every move of a repertoire.
 fn edges(conn: &Connection, color: Side) -> Result<Vec<(i64, i64, i64, String)>> {
-    let mut stmt = conn.prepare_cached(
-        "SELECT id, parent_hash, child_hash, uci FROM repertoire_moves WHERE color = ?1 ORDER BY created_at, id",
-    )?;
+    let mut stmt =
+        conn.prepare_cached("SELECT id, parent_hash, child_hash, uci FROM repertoire_moves WHERE color = ?1 ORDER BY created_at, id")?;
     let rows = stmt.query_map([side_str(color)], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?;
     Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
 }
@@ -199,9 +198,8 @@ fn sync_cards(conn: &Connection, color: Side, now: i64) -> Result<()> {
 }
 
 pub fn moves(conn: &Connection, color: Side) -> Result<Vec<RepMove>> {
-    let mut stmt = conn.prepare(
-        "SELECT id, parent_fen, uci, san, child_fen, comment FROM repertoire_moves WHERE color = ?1 ORDER BY created_at, id",
-    )?;
+    let mut stmt =
+        conn.prepare("SELECT id, parent_fen, uci, san, child_fen, comment FROM repertoire_moves WHERE color = ?1 ORDER BY created_at, id")?;
     let rows = stmt.query_map([side_str(color)], |r| {
         Ok(RepMove {
             id: r.get::<_, i64>(0)? as i32,
@@ -358,7 +356,9 @@ pub fn stats(conn: &Connection, color: Side, now: i64) -> Result<RepertoireStats
         due_now: count("SELECT COUNT(*) FROM repertoire_cards WHERE color = ?1 AND due <= ?2 AND state != 0")?,
         new_cards: count("SELECT COUNT(*) FROM repertoire_cards WHERE color = ?1 AND state = 0 AND ?2 = ?2")?,
         next_due: conn
-            .query_row("SELECT MIN(due) FROM repertoire_cards WHERE color = ?1 AND due > ?2", params![c, now], |r| r.get::<_, Option<i64>>(0))?
+            .query_row("SELECT MIN(due) FROM repertoire_cards WHERE color = ?1 AND due > ?2", params![c, now], |r| {
+                r.get::<_, Option<i64>>(0)
+            })?
             .map(|t| t as f64),
     })
 }
@@ -408,7 +408,7 @@ mod tests {
         let next = grade(&conn, Side::Black, &first.key, Grade::Good, T0).unwrap();
         assert!(next.due as i64 > T0);
         assert_eq!(due(&conn, Some(Side::Black), T0, 10, 10).unwrap().len(), 1, "graded card is no longer due");
-        assert!(due(&conn, Some(Side::Black), next.due as i64 + 1, 10, 10).unwrap().len() >= 1);
+        assert!(!due(&conn, Some(Side::Black), next.due as i64 + 1, 10, 10).unwrap().is_empty());
 
         // Removing 1...c5 drops the rest of the line too.
         let c5 = moves(&conn, Side::Black).unwrap().into_iter().find(|m| m.san == "c5").unwrap();

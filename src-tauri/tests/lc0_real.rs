@@ -41,19 +41,18 @@ async fn maia_plays_a_legal_human_move_with_wdl() {
 #[tokio::test]
 #[ignore]
 async fn full_strength_finds_mate_in_one_on_metal() {
-    let mut settings = Settings::default();
-    settings.backend = Some("metal".into());
-    settings.backend_opts = Some(std::env::var("GRANDIE_GPU").unwrap_or_else(|_| "gpu=1".into()));
+    let settings = Settings {
+        backend: Some("metal".into()),
+        backend_opts: Some(std::env::var("GRANDIE_GPU").unwrap_or_else(|_| "gpu=1".into())),
+        ..Settings::default()
+    };
     let weights = network_path(&networks_dir(), "791556");
     let engine = lc0::start(&lc0_path(), &Lc0Config::full(weights, &settings)).await.unwrap();
     let fen = "6k1/5ppp/8/8/8/8/5PPP/3R2K1 w - - 0 1";
-    let result = tokio::time::timeout(
-        Duration::from_secs(120),
-        engine.search(&format!("position fen {fen}"), "go nodes 200", |_| {}),
-    )
-    .await
-    .unwrap()
-    .unwrap();
+    let result = tokio::time::timeout(Duration::from_secs(120), engine.search(&format!("position fen {fen}"), "go nodes 200", |_| {}))
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(result.best, "d1d8");
     // lc0 loads the network (and prints its backend banner) on the first search.
     tokio::time::sleep(Duration::from_millis(200)).await;
@@ -88,8 +87,7 @@ mod full_game {
     async fn timed_game_against_maia_plays_to_the_end() {
         let dir = tempfile::tempdir().unwrap();
         let (tx, rx) = channel();
-        let mut settings = Settings::default();
-        settings.human_think_time = false;
+        let settings = Settings { human_think_time: false, ..Settings::default() };
         let ctx = Arc::new(PlayContext {
             observer: Arc::new(Collector(Mutex::new(tx))),
             settings,
@@ -111,12 +109,8 @@ mod full_game {
         while snap.outcome.is_none() {
             assert!(std::time::Instant::now() < deadline, "game took too long");
             if !snap.position.dests.is_empty() {
-                let mut moves: Vec<String> = snap
-                    .position
-                    .dests
-                    .iter()
-                    .flat_map(|(from, tos)| tos.iter().map(move |to| format!("{from}{to}")))
-                    .collect();
+                let mut moves: Vec<String> =
+                    snap.position.dests.iter().flat_map(|(from, tos)| tos.iter().map(move |to| format!("{from}{to}"))).collect();
                 moves.sort();
                 let mut uci = moves[0].clone();
                 let rank = uci.as_bytes()[3];
@@ -162,16 +156,16 @@ mod review {
     #[tokio::test]
     #[ignore]
     async fn real_review_flags_the_blunder() {
-        let mut settings = Settings::default();
-        settings.backend = Some("metal".into());
-        settings.backend_opts = Some(std::env::var("GRANDIE_GPU").unwrap_or_else(|_| "gpu=1".into()));
+        let settings = Settings {
+            backend: Some("metal".into()),
+            backend_opts: Some(std::env::var("GRANDIE_GPU").unwrap_or_else(|_| "gpu=1".into())),
+            ..Settings::default()
+        };
         let config = Lc0Config::full(network_path(&networks_dir(), "791556"), &settings);
         let engine: Arc<Engine> = lc0::start(&lc0_path(), &config).await.unwrap();
         let moves: Vec<String> = ["e2e4", "e7e5", "d1h5", "b8c6", "f1c4", "g8f6", "h5f7"].iter().map(|s| s.to_string()).collect();
         let started = std::time::Instant::now();
-        let r = run(&engine, true, START_FEN, &moves, ReviewDepth::Quick, Arc::new(AtomicBool::new(false)), |_, _| {})
-            .await
-            .unwrap();
+        let r = run(&engine, true, START_FEN, &moves, ReviewDepth::Quick, Arc::new(AtomicBool::new(false)), |_, _| {}).await.unwrap();
         println!("review took {:?}", started.elapsed());
         for m in &r.moves {
             println!("{:>2} {:6} {:?} {:.0}% -> {:.0}% best {:?}", m.ply, m.san, m.class, m.win_before, m.win_after, m.best_san);

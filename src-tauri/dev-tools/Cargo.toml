@@ -1,0 +1,28 @@
+# Developer tools kept out of the app crate so Tauri bundles only the app:
+# a scripted UCI engine for tests and the level calibration tool.
+[package]
+name = "grandie-dev-tools"
+version = "0.1.0"
+authors = ["Grandie Chess contributors"]
+license = "GPL-3.0-or-later"
+edition = "2021"
+rust-version = "1.97"
+publish = false
+
+[dependencies]
+grandie-chess = { path = ".." }
+shakmaty = "0.30"
+tokio = { version = "1", features = ["full"] }
+
+[dev-dependencies]
+tempfile = "3"
+
+# Scripted UCI engine used by tests (no GPU or network needed).
+[[bin]]
+name = "fake-uci"
+path = "src/bin/fake_uci.rs"
+
+# Plays engine-vs-engine matches to estimate the Elo of each opponent level.
+[[bin]]
+name = "calibrate"
+path = "src/bin/calibrate.rs"

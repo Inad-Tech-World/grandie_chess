@@ -102,10 +102,7 @@ impl GameTree {
     }
 
     pub(crate) fn add_applied(&mut self, parent: u32, uci: &str, san: &str, fen: String) -> u32 {
-        if let Some(&existing) = self.nodes[parent as usize]
-            .children
-            .iter()
-            .find(|&&c| self.nodes[c as usize].uci.as_deref() == Some(uci))
+        if let Some(&existing) = self.nodes[parent as usize].children.iter().find(|&&c| self.nodes[c as usize].uci.as_deref() == Some(uci))
         {
             return existing;
         }

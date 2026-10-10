@@ -28,4 +28,6 @@ test("progress dashboard shows strength, levels and weak openings", async ({ pag
   await expect(page.getByRole("cell", { name: /Maia 1500/ })).toBeVisible();
   await expect(page.getByRole("cell", { name: /Sicilian Defense/ })).toBeVisible();
   await expect(page.getByText("Mistakes and blunders per game")).toBeVisible();
+  await expect(page.getByText("Against each level over time")).toBeVisible();
+  await expect(page.locator("input[aria-label=\"Opponent level\"]")).toHaveValue("Maia 1500");
 });

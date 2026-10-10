@@ -3,6 +3,6 @@
 pub mod benchmark;
 pub mod catalog;
 pub mod lc0;
-pub mod registry;
 pub mod process;
+pub mod registry;
 pub mod uci;

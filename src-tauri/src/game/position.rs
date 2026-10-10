@@ -118,8 +118,7 @@ pub struct AppliedMove {
 
 pub fn parse_fen(fen: &str) -> Result<Chess> {
     let fen: Fen = fen.trim().parse().map_err(|e| Error::Chess(format!("invalid FEN: {e}")))?;
-    fen.into_position(CastlingMode::Standard)
-        .map_err(|e| Error::Chess(format!("illegal position: {e}")))
+    fen.into_position(CastlingMode::Standard).map_err(|e| Error::Chess(format!("illegal position: {e}")))
 }
 
 pub fn fen_of(pos: &Chess) -> String {
