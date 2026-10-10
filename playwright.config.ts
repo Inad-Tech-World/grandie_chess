@@ -9,7 +9,8 @@ export default defineConfig({
   // The Vite dev server and the browsers share the machine; more workers
   // than this starves both and makes timings flaky.
   workers: process.env.CI ? 2 : 3,
-  reporter: [["list"]],
+  // On CI, failures also become annotations on the run, readable without signing in.
+  reporter: process.env.CI ? [["list"], ["github"]] : [["list"]],
   use: {
     baseURL: "http://localhost:1430",
     viewport: { width: 1360, height: 860 },

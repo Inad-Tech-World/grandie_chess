@@ -7,6 +7,7 @@ pub mod import;
 pub mod search;
 
 use std::path::Path;
+use std::time::Duration;
 
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
@@ -148,13 +149,24 @@ const MIGRATIONS: &[&str] = &[
     "#,
 ];
 
+/// Per-connection settings. The busy timeout comes first so a connection waits
+/// for a lock instead of failing.
 fn configure(conn: &mut Connection) -> rusqlite::Result<()> {
     conn.execute_batch(
-        "PRAGMA journal_mode = WAL;
+        "PRAGMA busy_timeout = 5000;
          PRAGMA synchronous = NORMAL;
-         PRAGMA foreign_keys = ON;
-         PRAGMA busy_timeout = 5000;",
+         PRAGMA foreign_keys = ON;",
     )
+}
+
+/// Switch a database file to WAL mode. The mode is stored in the file, so this
+/// runs once before a pool opens: switching needs an exclusive lock, which the
+/// pool's connections would otherwise race for.
+pub fn enable_wal(path: &Path) -> Result<()> {
+    let conn = Connection::open(path)?;
+    conn.busy_timeout(Duration::from_secs(5))?;
+    conn.pragma_update_and_check(None, "journal_mode", "WAL", |_| Ok(()))?;
+    Ok(())
 }
 
 pub fn migrate(conn: &mut Connection) -> Result<()> {
@@ -170,6 +182,7 @@ pub fn migrate(conn: &mut Connection) -> Result<()> {
 }
 
 pub fn open(path: &Path) -> Result<DbPool> {
+    enable_wal(path)?;
     let manager = SqliteConnectionManager::file(path).with_init(configure);
     let pool = Pool::builder().max_size(6).build(manager)?;
     let mut conn = pool.get()?;
@@ -206,5 +219,18 @@ mod tests {
         migrate(&mut conn).unwrap();
         let n: i64 = conn.query_row("SELECT COUNT(*) FROM games", [], |r| r.get(0)).unwrap();
         assert_eq!(n, 0);
+    }
+
+    #[test]
+    fn file_pool_connections_share_wal_mode() {
+        let dir = tempfile::tempdir().unwrap();
+        let pool = open(&dir.path().join("grandie.db")).unwrap();
+        let conns: Vec<_> = (0..pool.max_size()).map(|_| pool.get().unwrap()).collect();
+        for conn in &conns {
+            let mode: String = conn.query_row("PRAGMA journal_mode", [], |r| r.get(0)).unwrap();
+            assert_eq!(mode, "wal");
+            let timeout: i64 = conn.query_row("PRAGMA busy_timeout", [], |r| r.get(0)).unwrap();
+            assert_eq!(timeout, 5000);
+        }
     }
 }
