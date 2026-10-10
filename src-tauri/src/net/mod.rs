@@ -2,4 +2,5 @@
 
 pub mod chesscom;
 pub mod download;
+pub mod explorer;
 pub mod lichess;

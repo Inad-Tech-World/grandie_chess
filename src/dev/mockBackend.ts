@@ -517,6 +517,318 @@ Object.assign(handlers, {
   },
 });
 
+// ---- database (phase 3) ----
+
+interface MockGame {
+  row: import("../bindings").GameRow;
+  pgn: string;
+  fens: string[];
+  review: ReviewResult | null;
+}
+
+const SAMPLE_GAMES: { white: string; black: string; result: string; eco: string; opening: string; date: string; moves: string; user: Side | null; source: string }[] = [
+  { white: "Tester", black: "Rival", result: "1-0", eco: "C50", opening: "Italian Game", date: "2026.09.01", moves: "e4 e5 Nf3 Nc6 Bc4 Bc5 c3 Nf6", user: "white", source: "lichess" },
+  { white: "Rival", black: "Tester", result: "0-1", eco: "B20", opening: "Sicilian Defense", date: "2026.09.12", moves: "e4 c5 Nf3 d6 d4 cxd4", user: "black", source: "lichess" },
+  { white: "Tester", black: "Someone", result: "1/2-1/2", eco: "D30", opening: "Queen's Gambit Declined", date: "2026.09.20", moves: "d4 d5 c4 e6 Nf3 Nf6", user: "white", source: "chesscom" },
+  { white: "Carlsen", black: "Nepo", result: "1-0", eco: "C65", opening: "Ruy Lopez", date: "2026.08.02", moves: "e4 e5 Nf3 Nc6 Bb5 Nf6", user: null, source: "pgn" },
+];
+const dbGames: MockGame[] = [];
+let nextGameId = 1;
+
+function addSampleGames(source?: string) {
+  let imported = 0;
+  for (const g of SAMPLE_GAMES) {
+    if (source && g.source !== source) continue;
+    if (dbGames.some((d) => d.row.white === g.white && d.row.date === g.date)) continue;
+    const pgn = `[White "${g.white}"]\n[Black "${g.black}"]\n[Result "${g.result}"]\n[Date "${g.date}"]\n[ECO "${g.eco}"]\n[Opening "${g.opening}"]\n\n${g.moves} ${g.result}\n`;
+    const tree = parsePgn(pgn).games[0];
+    dbGames.push({
+      row: {
+        id: nextGameId++,
+        source: g.source,
+        white: g.white,
+        black: g.black,
+        whiteElo: 1600,
+        blackElo: 1580,
+        result: g.result,
+        date: g.date,
+        eco: g.eco,
+        opening: g.opening,
+        timeControl: "300+3",
+        speed: "blitz",
+        userColor: g.user,
+        opponentLevel: null,
+        plyCount: g.moves.split(" ").length,
+        reviewed: false,
+        userAccuracy: null,
+      },
+      pgn,
+      fens: tree.nodes.map((n) => n.fen),
+      review: null,
+    });
+    imported++;
+  }
+  return imported;
+}
+
+Object.assign(handlers, {
+  db_stats: () => ({
+    games: dbGames.length,
+    mine: dbGames.filter((g) => g.row.userColor).length,
+    reviewed: dbGames.filter((g) => g.review).length,
+    sources: [],
+  }),
+  db_query: (a: Record<string, unknown>) => {
+    const q = a.query as import("../bindings").GameQuery;
+    const text = q.text?.toLowerCase();
+    const sameBoard = (f: string, g: string) => f.split(" ").slice(0, 2).join(" ") === g.split(" ").slice(0, 2).join(" ");
+    let rows = dbGames.filter((g) => {
+      const r = g.row;
+      if (text && ![r.white, r.black, r.opening, r.eco].some((v) => v?.toLowerCase().includes(text))) return false;
+      if ((q.onlyMine || q.color || q.outcome) && !r.userColor) return false;
+      if (q.color && r.userColor !== q.color) return false;
+      if (q.outcome) {
+        const won = (r.userColor === "white" && r.result === "1-0") || (r.userColor === "black" && r.result === "0-1");
+        const outcome = r.result === "1/2-1/2" ? "draw" : won ? "win" : "loss";
+        if (outcome !== q.outcome) return false;
+      }
+      if (q.source && r.source !== q.source) return false;
+      if (q.position?.exact && !g.fens.some((f) => sameBoard(f, q.position!.fen))) return false;
+      return true;
+    }).map((g) => g.row);
+    rows = rows.sort((x, y) => (y.date ?? "").localeCompare(x.date ?? ""));
+    return { total: rows.length, rows: rows.slice(q.offset ?? 0, (q.offset ?? 0) + (q.limit || 200)), elapsedMs: 3 };
+  },
+  db_game: (a: Record<string, unknown>) => {
+    const g = dbGames.find((d) => d.row.id === a.id);
+    if (!g) throw "game not found";
+    return { row: g.row, tree: parsePgn(g.pgn).games[0], review: g.review };
+  },
+  db_delete: (a: Record<string, unknown>) => {
+    const ids = a.ids as number[];
+    const before = dbGames.length;
+    for (const id of ids) {
+      const i = dbGames.findIndex((d) => d.row.id === id);
+      if (i >= 0) dbGames.splice(i, 1);
+    }
+    return before - dbGames.length;
+  },
+  db_find: () => null,
+  db_save_review: (a: Record<string, unknown>) => {
+    const g = dbGames.find((d) => d.row.id === a.gameId);
+    if (g) {
+      g.review = a.review as ReviewResult;
+      g.row = { ...g.row, reviewed: true };
+    }
+    return null;
+  },
+  db_import_grandie: () => ({ seen: 0, imported: 0, duplicates: 0, errors: [], newest: null }),
+  db_import_files: async (a: Record<string, unknown>) => {
+    await emit("import-progress", { jobId: a.jobId, phase: "Importing", seen: 1, imported: 1, bytes: 0 });
+    const n = addSampleGames("pgn");
+    return { seen: n, imported: n, duplicates: 0, errors: [], newest: null };
+  },
+  db_import_lichess: async (a: Record<string, unknown>) => {
+    await emit("import-progress", { jobId: a.jobId, phase: "Downloading from Lichess", seen: 2, imported: 0, bytes: 2048 });
+    await new Promise((r) => setTimeout(r, 100));
+    const n = addSampleGames("lichess");
+    return { seen: 2, imported: n, duplicates: 2 - n, errors: [], newest: null };
+  },
+  db_import_chesscom: async () => {
+    const n = addSampleGames("chesscom");
+    return { seen: 1, imported: n, duplicates: 1 - n, errors: [], newest: null };
+  },
+});
+
+// ---- openings and repertoire (phase 4) ----
+
+interface MockRepMove { id: number; color: Side; parentFen: string; uci: string; san: string; childFen: string; comment: string | null }
+const repMoves: MockRepMove[] = [];
+const repGrades = new Map<string, number>(); // key -> due timestamp (ms)
+let nextRepId = 1;
+const spot = (f: string) => f.split(" ").slice(0, 4).join(" ");
+
+function repCards(color: Side) {
+  const turn = color === "white" ? " w " : " b ";
+  const seen = new Map<string, string>();
+  for (const m of repMoves) if (m.color === color && m.parentFen.includes(turn)) seen.set(spot(m.parentFen), m.parentFen);
+  return [...seen.entries()].map(([key, fen]) => ({ key, fen }));
+}
+
+function lineTo(color: Side, target: string): string[] | null {
+  const queue: { fen: string; line: string[] }[] = [{ fen: START, line: [] }];
+  const seen = new Set<string>();
+  while (queue.length) {
+    const { fen, line } = queue.shift()!;
+    if (spot(fen) === target) return line;
+    if (seen.has(spot(fen))) continue;
+    seen.add(spot(fen));
+    for (const m of repMoves.filter((r) => r.color === color && spot(r.parentFen) === spot(fen))) queue.push({ fen: m.childFen, line: [...line, m.uci] });
+  }
+  return null;
+}
+
+Object.assign(handlers, {
+  opening_name: (a: Record<string, unknown>) => {
+    const moves = a.moves as string[];
+    if (moves[0] === "e2e4" && moves[1] === "c7c5") return { eco: "B20", name: "Sicilian Defense" };
+    if (moves[0] === "e2e4") return { eco: "B00", name: "King's Pawn Game" };
+    return null;
+  },
+  explorer_db: (a: Record<string, unknown>) => {
+    const fen = a.fen as string;
+    const counts = new Map<string, { san: string; games: number; white: number; draws: number; black: number }>();
+    for (const g of dbGames) {
+      const tree = parsePgn(g.pgn).games[0];
+      for (const n of tree.nodes) {
+        if (spot(n.fen) !== spot(fen) || !n.children.length) continue;
+        const next = tree.nodes[n.children[0]];
+        const c = counts.get(next.uci!) ?? { san: next.san!, games: 0, white: 0, draws: 0, black: 0 };
+        c.games++;
+        if (g.row.result === "1-0") c.white++;
+        else if (g.row.result === "0-1") c.black++;
+        else c.draws++;
+        counts.set(next.uci!, c);
+      }
+    }
+    const moves = [...counts.entries()].map(([uci, c]) => ({ uci, ...c, avgRating: 1600 })).sort((x, y) => y.games - x.games);
+    const total = moves.reduce((t, m) => t + m.games, 0);
+    return { source: "database", fen, total, white: 0, draws: 0, black: 0, moves, opening: null };
+  },
+  explorer_lichess: () => {
+    throw "Add a Lichess API token in Settings to use the Lichess explorer.";
+  },
+  lichess_token_status: () => false,
+  lichess_token_set: () => null,
+  file_read_text: () => "1. e4 e5 2. Nf3 *",
+  repertoire_moves: (a: Record<string, unknown>) => repMoves.filter((m) => m.color === a.color).map(({ color: _c, ...m }) => m),
+  repertoire_add_line: (a: Record<string, unknown>) => {
+    let fen = START;
+    let added = 0;
+    for (const uci of a.moves as string[]) {
+      const applied = apply(fen, uci);
+      if (!repMoves.some((m) => m.color === a.color && spot(m.parentFen) === spot(fen) && m.uci === applied.uci)) {
+        repMoves.push({ id: nextRepId++, color: a.color as Side, parentFen: fen, uci: applied.uci, san: applied.san, childFen: applied.position.fen, comment: null });
+        added++;
+      }
+      fen = applied.position.fen;
+    }
+    return added;
+  },
+  repertoire_remove_move: (a: Record<string, unknown>) => {
+    const i = repMoves.findIndex((m) => m.id === a.id);
+    if (i >= 0) repMoves.splice(i, 1);
+    return null;
+  },
+  repertoire_set_comment: () => null,
+  repertoire_import_pgn: () => 0,
+  repertoire_export_pgn: () => "*",
+  repertoire_stats: (a: Record<string, unknown>) => {
+    const cards = repCards(a.color as Side);
+    const now = Date.now();
+    return {
+      moves: repMoves.filter((m) => m.color === a.color).length,
+      cards: cards.length,
+      dueNow: cards.filter((c) => (repGrades.get(c.key) ?? Infinity) <= now).length,
+      newCards: cards.filter((c) => !repGrades.has(c.key)).length,
+      nextDue: null,
+    };
+  },
+  repertoire_due: (a: Record<string, unknown>) => {
+    const colors: Side[] = a.color ? [a.color as Side] : ["white", "black"];
+    const now = Date.now();
+    const items = [];
+    for (const color of colors) {
+      for (const c of repCards(color)) {
+        const due = repGrades.get(c.key);
+        if (due !== undefined && due > now) continue;
+        const line = lineTo(color, c.key);
+        if (!line) continue;
+        const expected = repMoves.filter((m) => m.color === color && spot(m.parentFen) === c.key).map((m) => ({ uci: m.uci, san: m.san }));
+        items.push({ color, key: c.key, fen: c.fen, line, expected, isNew: due === undefined });
+      }
+    }
+    return items.sort((x, y) => x.line.length - y.line.length);
+  },
+  repertoire_grade: (a: Record<string, unknown>) => {
+    const later = a.grade === "again" ? 60_000 : 86_400_000;
+    repGrades.set(a.key as string, Date.now() + later);
+    return { due: (Date.now() + later) / 1000, stability: 1, difficulty: 5, elapsedDays: 0, scheduledDays: 1, reps: 1, lapses: 0, state: 2, lastReview: Date.now() / 1000 };
+  },
+});
+
+// ---- puzzles and progress (phase 5) ----
+
+let puzzleCount = 0;
+let puzzleRating = { rating: 1500, deviation: 350, volatility: 0.06 };
+const MOCK_PUZZLE = {
+  id: "0000D",
+  fen: "5rk1/1p3ppp/pq3b2/8/8/1P1Q1N2/P4PPP/3R2K1 w - - 2 27",
+  moves: ["d3d6", "f8d8", "d6d8", "f6d8"],
+  rating: 1529,
+  deviation: 74,
+  popularity: 96,
+  plays: 37506,
+  themes: ["advantage", "endgame", "short"],
+  gameUrl: "https://lichess.org/F8M8OS71#53",
+  opening: null,
+};
+const puzzleAttempts: { solved: boolean; rating: number }[] = [];
+
+Object.assign(handlers, {
+  puzzles_info: () => ({ count: puzzleCount, rating: puzzleRating }),
+  puzzles_download: async () => {
+    for (let i = 1; i <= 3; i++) {
+      await emit("download-progress", { id: "puzzles", received: i * 1e8, total: 3e8, done: false, error: null });
+      await new Promise((r) => setTimeout(r, 40));
+    }
+    await emit("import-progress", { jobId: "puzzles", phase: "Importing puzzles", seen: 20000, imported: 9000, bytes: 0 });
+    puzzleCount = 1_500_000;
+    return puzzleCount;
+  },
+  puzzles_themes: () => [
+    { theme: "endgame", count: 400000 },
+    { theme: "mateIn2", count: 120000 },
+  ],
+  puzzle_next: () => MOCK_PUZZLE,
+  puzzle_check: (a: Record<string, unknown>) => {
+    const index = a.index as number;
+    const correct = a.uci === MOCK_PUZZLE.moves[index];
+    const last = index === MOCK_PUZZLE.moves.length - 1;
+    return { correct, reply: correct && !last ? MOCK_PUZZLE.moves[index + 1] : null, done: correct && last };
+  },
+  puzzle_finish: (a: Record<string, unknown>) => {
+    const before = { ...puzzleRating };
+    puzzleRating = { ...puzzleRating, rating: puzzleRating.rating + (a.solved ? 12 : -12), deviation: 300 };
+    puzzleAttempts.push({ solved: a.solved as boolean, rating: puzzleRating.rating });
+    return { before, after: puzzleRating };
+  },
+  progress_summary: () => ({
+    totals: {
+      games: 3,
+      wins: 2,
+      draws: 0,
+      losses: 1,
+      gamesLast30Days: 3,
+      puzzlesAttempted: puzzleAttempts.length,
+      puzzlesSolved: puzzleAttempts.filter((p) => p.solved).length,
+    },
+    levels: [{ level: "maia-1500", name: "Maia 1500", elo: 1500, games: 3, wins: 2, draws: 0, losses: 1, performance: 1633 }],
+    strength: [
+      { at: 1_790_000_000, rating: 1450 },
+      { at: 1_791_000_000, rating: 1560 },
+      { at: 1_792_000_000, rating: 1633 },
+    ],
+    quality: [
+      { gameId: 1, at: 1_790_000_000, opponent: "Maia 1500", accuracy: 78, inaccuracies: 3, mistakes: 2, blunders: 1 },
+      { gameId: 2, at: 1_791_000_000, opponent: "Maia 1500", accuracy: 85, inaccuracies: 2, mistakes: 1, blunders: 0 },
+    ],
+    weakestOpenings: [{ family: "Sicilian Defense", eco: "B20", games: 3, score: 0.33, accuracy: 74 }],
+    puzzleRating,
+    puzzleHistory: puzzleAttempts.map((p, i) => ({ at: 1_790_000_000 + i, rating: p.rating })),
+  }),
+});
+
 /** Register additional mock commands (used by later features). */
 export function registerMock(name: string, handler: Handler) {
   handlers[name] = handler;

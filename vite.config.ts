@@ -23,6 +23,11 @@ export default defineConfig(() => ({
       ignored: ["**/src-tauri/**"],
     },
   },
+  // Scan every source file up front so dependency optimisation never
+  // reloads the page mid-session (it breaks fresh e2e runs).
+  optimizeDeps: {
+    entries: ["index.html", "src/**/*.{ts,tsx}"],
+  },
   test: {
     environment: "jsdom",
     include: ["src/**/*.test.{ts,tsx}"],

@@ -7,7 +7,9 @@ pub mod error;
 pub mod game;
 pub mod net;
 pub mod paths;
+pub mod secrets;
 pub mod settings;
+pub mod training;
 
 mod commands;
 mod events;
@@ -46,6 +48,7 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::pgn_parse,
             commands::pgn_read_file,
             commands::pgn_write,
+            commands::file_read_text,
             commands::file_write_text,
             commands::engines_list,
             commands::engine_add,
@@ -68,6 +71,27 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::db_import_lichess,
             commands::db_import_chesscom,
             commands::db_import_grandie,
+            commands::opening_name,
+            commands::explorer_db,
+            commands::explorer_lichess,
+            commands::lichess_token_status,
+            commands::lichess_token_set,
+            commands::repertoire_moves,
+            commands::repertoire_add_line,
+            commands::repertoire_remove_move,
+            commands::repertoire_set_comment,
+            commands::repertoire_import_pgn,
+            commands::repertoire_export_pgn,
+            commands::repertoire_stats,
+            commands::repertoire_due,
+            commands::repertoire_grade,
+            commands::puzzles_info,
+            commands::puzzles_download,
+            commands::puzzles_themes,
+            commands::puzzle_next,
+            commands::puzzle_check,
+            commands::puzzle_finish,
+            commands::progress_summary,
         ])
         .events(collect_events![
             events::PlayUpdate,
@@ -101,6 +125,8 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_window_state::Builder::default().build())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .invoke_handler(builder.invoke_handler())
         .setup(move |app| {
             builder.mount_events(app);

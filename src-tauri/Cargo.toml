@@ -43,6 +43,10 @@ reqwest = { version = "0.13", default-features = false, features = ["native-tls"
 rusqlite = { version = "0.40", features = ["bundled"] }
 r2d2 = "0.8"
 r2d2_sqlite = "0.35"
+rs-fsrs = "1.2"
+keyring = { version = "3", features = ["apple-native"] }
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
 [profile.release]
@@ -68,3 +72,11 @@ path = "src/bin/fake_uci.rs"
 [[bin]]
 name = "calibrate"
 path = "src/bin/calibrate.rs"
+
+# Optimised but quick to compile: for benchmarks such as
+# `cargo test --profile perf --test db_perf -- --ignored`.
+[profile.perf]
+inherits = "release"
+lto = false
+codegen-units = 16
+incremental = true

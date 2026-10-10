@@ -54,7 +54,8 @@ impl Lc0Config {
                 ..Default::default()
             },
             OpponentKind::Leela => {
-                let small = level.nodes.unwrap_or(1) <= 64;
+                // Up to 16 nodes the CPU answers instantly; GPU start-up would only add delay.
+                let small = level.nodes.unwrap_or(1) <= 16;
                 Lc0Config {
                     weights,
                     backend: if small { Some("blas".into()) } else { settings.backend.clone() },
@@ -143,7 +144,7 @@ fn parse_backend_line(line: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::catalog::Catalog;
+    use crate::engine::catalog::{Catalog, OpponentLevel};
 
     #[test]
     fn maia_runs_one_node_on_the_cpu() {
@@ -163,16 +164,22 @@ mod tests {
     }
 
     #[test]
-    fn strong_leela_levels_use_the_users_backend() {
+    fn deep_searching_levels_use_the_users_backend() {
         let c = Catalog::load();
         let mut s = Settings::default();
         s.backend = Some("metal".into());
         s.backend_opts = Some("gpu=1".into());
-        let cfg = Lc0Config::for_level(c.level("leela-8").unwrap(), "/n/x".into(), &s);
+        // More than 16 nodes per move: worth the GPU.
+        let deep = OpponentLevel { nodes: Some(64), ..c.level("leela-8").unwrap().clone() };
+        let cfg = Lc0Config::for_level(&deep, "/n/x".into(), &s);
         assert_eq!(cfg.backend.as_deref(), Some("metal"));
+        assert_eq!(cfg.backend_opts.as_deref(), Some("gpu=1"));
         assert_eq!(cfg.smart_pruning_factor, Some(0.0));
-        let weak = Lc0Config::for_level(c.level("leela-1").unwrap(), "/n/x".into(), &s);
-        assert_eq!(weak.backend.as_deref(), Some("blas"));
+        // Shallow levels answer instantly on the CPU.
+        for id in ["leela-1", "leela-8"] {
+            let cfg = Lc0Config::for_level(c.level(id).unwrap(), "/n/x".into(), &s);
+            assert_eq!(cfg.backend.as_deref(), Some("blas"), "{id}");
+        }
     }
 
     #[test]

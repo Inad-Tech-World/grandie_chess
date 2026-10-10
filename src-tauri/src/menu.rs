@@ -25,6 +25,7 @@ pub fn install<R: Runtime>(app: &App<R>) -> tauri::Result<()> {
 
     let app_menu = SubmenuBuilder::new(app, "Grandie Chess")
         .about(Some(about))
+        .item(&item("check_updates", "Check for Updates…", None)?)
         .separator()
         .item(&item("settings", "Settings…", Some("CmdOrCtrl+,"))?)
         .separator()

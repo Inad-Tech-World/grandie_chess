@@ -149,6 +149,8 @@ pub fn record_from_tree(tree: &GameTree, source: &str, source_id: Option<String>
         _ => None,
     };
     let start_fen = (tree.root().fen != START_FEN).then(|| tree.root().fen.clone());
+    // Fill in a missing ECO code or name from the bundled opening book.
+    let book = crate::game::openings::OpeningBook::get().classify(start_fen.as_deref(), &moves);
     let result = tree.header("Result").filter(|r| ["1-0", "0-1", "1/2-1/2"].contains(r)).unwrap_or("*").to_string();
     Ok(GameRecord {
         source_id: source_id.unwrap_or_else(|| derive_source_id(tree, source, &moves)),
@@ -162,8 +164,8 @@ pub fn record_from_tree(tree: &GameTree, source: &str, source_id: Option<String>
         white_elo: elo("WhiteElo"),
         black_elo: elo("BlackElo"),
         result,
-        eco: h("ECO"),
-        opening: h("Opening").or_else(|| opening_from_url(tree.header("ECOUrl"))),
+        eco: h("ECO").or_else(|| book.as_ref().map(|b| b.eco.clone())),
+        opening: h("Opening").or_else(|| opening_from_url(tree.header("ECOUrl"))).or_else(|| book.map(|b| b.name)),
         time_control: h("TimeControl"),
         speed: speed_of(tree.header("TimeControl")),
         termination: h("Termination"),

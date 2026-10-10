@@ -24,10 +24,12 @@ pub struct AppState {
     pub play: PlayManager,
     pub registry: Registry,
     pub db: DbPool,
+    pub puzzles: DbPool,
     pub analysis: AnalysisManager,
     /// Cancel flags of running game reviews, by review id.
     pub reviews: Mutex<HashMap<String, Arc<AtomicBool>>>,
     pub http: reqwest::Client,
+    pub explorer_cache: crate::net::explorer::ExplorerCache,
     /// Full-strength engine used for hints, kept warm between requests.
     helper: tokio::sync::Mutex<Option<(Lc0Config, Arc<Engine>)>>,
     downloads: Mutex<HashSet<String>>,
@@ -39,6 +41,7 @@ impl AppState {
         let settings = Settings::load(&paths.settings_file);
         Ok(AppState {
             db: crate::db::open(&paths.db_file)?,
+            puzzles: crate::training::puzzles::open(&paths.puzzles_db_file)?,
             registry: Registry::new(&paths.data_dir),
             analysis: AnalysisManager::default(),
             reviews: Mutex::new(HashMap::new()),
@@ -47,6 +50,7 @@ impl AppState {
             catalog: Catalog::load(),
             play: PlayManager::default(),
             http: http_client(),
+            explorer_cache: Default::default(),
             helper: tokio::sync::Mutex::new(None),
             downloads: Mutex::new(HashSet::new()),
         })

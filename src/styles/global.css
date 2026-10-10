@@ -479,3 +479,121 @@ textarea,
   height: 92px;
   flex: none;
 }
+
+/* ---- board editor palette ---- */
+
+.palette-piece {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid var(--hairline);
+  background: var(--surface-sunken);
+  cursor: pointer;
+  padding: 0;
+}
+
+.palette-piece[data-active="true"] {
+  border-color: var(--mantine-primary-color-filled);
+  background: var(--accent-soft);
+}
+
+.palette-piece piece {
+  position: absolute;
+  inset: 3px;
+  width: auto !important;
+  height: auto !important;
+}
+
+/* ---- database table ---- */
+
+.db-table {
+  font-size: 13px;
+}
+
+.db-row {
+  display: grid;
+  grid-template-columns: 96px minmax(120px, 1.2fr) minmax(120px, 1.2fr) 64px minmax(160px, 1.6fr) 90px 56px 72px;
+  align-items: center;
+  height: 34px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--hairline);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.db-row > * {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-right: 8px;
+}
+
+.db-row:hover {
+  background: var(--hairline);
+}
+
+.db-row[data-selected="true"] {
+  background: var(--accent-soft);
+}
+
+.db-head {
+  font-weight: 600;
+  color: var(--text-dim);
+  cursor: default;
+  position: sticky;
+  top: 0;
+  background: var(--surface-raised);
+  z-index: 1;
+}
+
+.db-head button {
+  all: unset;
+  cursor: pointer;
+}
+
+.result-win {
+  color: var(--good);
+  font-weight: 600;
+}
+
+.result-loss {
+  color: var(--bad);
+  font-weight: 600;
+}
+
+/* ---- settings swatches ---- */
+
+.theme-swatch {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  box-shadow: 0 0 0 1px var(--hairline);
+}
+
+.piece-swatch {
+  display: flex;
+  gap: 2px;
+  padding: 4px 6px;
+  border-radius: 10px;
+  border: 2px solid transparent;
+  /* A light-square colour so both white and black pieces show. */
+  background: #e8d7b9;
+  cursor: pointer;
+}
+
+.piece-swatch img {
+  width: 30px;
+  height: 30px;
+}
+
+.theme-swatch[data-active="true"],
+.piece-swatch[data-active="true"] {
+  border-color: var(--mantine-primary-color-filled);
+}
+
+/* Keep notifications clear of the title bar and tab strip. */
+.mantine-Notifications-root[data-position="top-right"] {
+  top: calc(var(--titlebar-height) + 8px);
+}

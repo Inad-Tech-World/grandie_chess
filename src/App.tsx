@@ -14,6 +14,8 @@ import { closeTab, copyFen, openAnalysis, openNewGame, openPgnFiles, pasteFenOrP
 import { useAnalysis } from "./stores/analysis";
 import { useEngines } from "./stores/engines";
 import { useReviews } from "./stores/reviews";
+import { HelpModals, useHelp } from "./layout/HelpModals";
+import { checkForUpdates } from "./lib/updates";
 
 function flipActiveBoard() {
   const tab = activeTab();
@@ -57,8 +59,13 @@ function handleMenu(action: string) {
       void pasteFenOrPgn();
       break;
     case "help_credits":
+      useHelp.getState().show("credits");
+      break;
     case "help_shortcuts":
-      useApp.getState().setSection("settings");
+      useHelp.getState().show("shortcuts");
+      break;
+    case "check_updates":
+      void checkForUpdates(true);
       break;
   }
 }
@@ -87,13 +94,25 @@ export default function App() {
     void load();
   }, [load]);
 
+  // Quietly look for updates in release builds (not in dev or browser tests).
+  useEffect(() => {
+    if (import.meta.env.PROD && import.meta.env.VITE_MOCK_TAURI !== "1") void checkForUpdates(false);
+  }, []);
+
+  // Board theme and piece set are CSS classes on <body> (see styles/boards.css, pieces.css).
+  useEffect(() => {
+    document.body.classList.forEach((c) => (c.startsWith("board-") || c.startsWith("pieces-")) && document.body.classList.remove(c));
+    document.body.classList.add(`board-${settings.boardTheme}`, `pieces-${settings.pieceSet}`);
+  }, [settings.boardTheme, settings.pieceSet]);
+
   const forced = settings.colorScheme === "auto" ? undefined : settings.colorScheme;
   return (
     <MantineProvider theme={theme} defaultColorScheme="auto" forceColorScheme={forced}>
       <ModalsProvider>
-        <Notifications position="bottom-right" />
+        <Notifications position="top-right" />
         <Shell />
         <Onboarding />
+        <HelpModals />
       </ModalsProvider>
     </MantineProvider>
   );

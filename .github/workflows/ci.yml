@@ -5,6 +5,14 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
+# A newer push to the same branch makes older runs pointless.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-and-test:
     strategy:
@@ -18,6 +26,7 @@ jobs:
           - runner: macos-15-intel
             target: x86_64-apple-darwin
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
         with:
@@ -35,16 +44,23 @@ jobs:
         with:
           workspaces: src-tauri
 
+      # lc0 is rebuilt only when the pinned submodule commit or the build script changes.
+      - name: lc0 revision
+        id: lc0-rev
+        run: echo "sha=$(git rev-parse HEAD:engine/lc0)" >> "$GITHUB_OUTPUT"
       - name: Cache lc0 build
         id: lc0-cache
         uses: actions/cache@v4
         with:
           path: src-tauri/binaries
-          key: lc0-${{ matrix.target }}-${{ hashFiles('.git/modules/engine/lc0/HEAD', 'engine/build-lc0.sh') }}
-
+          key: lc0-${{ matrix.target }}-${{ steps.lc0-rev.outputs.sha }}-${{ hashFiles('engine/build-lc0.sh') }}
       - name: Build lc0
         if: steps.lc0-cache.outputs.cache-hit != 'true'
         run: engine/build-lc0.sh
+      - name: Check lc0 binary
+        run: |
+          lipo -info src-tauri/binaries/lc0-${{ matrix.target }}
+          vtool -show-build src-tauri/binaries/lc0-${{ matrix.target }} | grep -E "minos|platform"
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
@@ -52,12 +68,23 @@ jobs:
 
       - name: Rust tests
         working-directory: src-tauri
-        run: cargo test
+        run: cargo test --locked
+
+      # The Rust tests regenerate the TypeScript bindings; they must already be committed.
+      - name: TypeScript bindings are up to date
+        run: git diff --exit-code src/bindings.ts
 
       - name: End-to-end tests (UI against the mock backend)
         run: |
           pnpm exec playwright install --with-deps chromium
           pnpm e2e
+      - name: Upload Playwright results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-${{ matrix.target }}
+          path: test-results/
+          retention-days: 7
 
       - name: Build app (unbundled)
         run: pnpm tauri build --no-bundle

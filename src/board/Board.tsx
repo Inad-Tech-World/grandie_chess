@@ -159,12 +159,12 @@ export function Board(props: BoardProps) {
   );
 }
 
-/** Measures the largest square board that fits a container. */
+/** Measures the largest square board that fits a container. The returned
+ *  `ref` is a callback ref, so it works for containers that appear later. */
 export function useBoardSize(reserveHeight = 0, reserveWidth = 0) {
-  const ref = useRef<HTMLDivElement>(null);
+  const [node, ref] = useState<HTMLDivElement | null>(null);
   const [size, setSize] = useState(480);
   useEffect(() => {
-    const node = ref.current;
     if (!node) return;
     const measure = () => {
       const r = node.getBoundingClientRect();
@@ -175,6 +175,6 @@ export function useBoardSize(reserveHeight = 0, reserveWidth = 0) {
     const ro = new ResizeObserver(measure);
     ro.observe(node);
     return () => ro.disconnect();
-  }, [reserveHeight, reserveWidth]);
+  }, [node, reserveHeight, reserveWidth]);
   return { ref, size };
 }

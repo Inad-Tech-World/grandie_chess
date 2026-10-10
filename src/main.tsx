@@ -6,6 +6,8 @@ import "@lichess-org/chessground/assets/chessground.base.css";
 import "@lichess-org/chessground/assets/chessground.brown.css";
 import "@lichess-org/chessground/assets/chessground.cburnett.css";
 import "./styles/global.css";
+import "./styles/boards.css";
+import "./styles/pieces.css";
 import App from "./App";
 
 async function boot() {

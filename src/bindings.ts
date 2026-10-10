@@ -38,6 +38,7 @@ export const commands = {
 	pgnParse: (text: string) => __TAURI_INVOKE<PgnParseResult>("pgn_parse", { text }),
 	pgnReadFile: (path: string) => typedError<PgnParseResult, string>(__TAURI_INVOKE("pgn_read_file", { path })),
 	pgnWrite: (tree: GameTree) => __TAURI_INVOKE<string>("pgn_write", { tree }),
+	fileReadText: (path: string) => typedError<string, string>(__TAURI_INVOKE("file_read_text", { path })),
 	fileWriteText: (path: string, contents: string) => typedError<null, string>(__TAURI_INVOKE("file_write_text", { path, contents })),
 	enginesList: () => __TAURI_INVOKE<EngineConfig[]>("engines_list"),
 	/**  Add a UCI engine from an executable the user picked. */
@@ -54,12 +55,79 @@ export const commands = {
 	reviewCancel: (reviewId: string) => __TAURI_INVOKE<void>("review_cancel", { reviewId }),
 	/**  Evaluate a candidate move ("retry this position"). */
 	reviewCheckMove: (fen: string, uci: string) => typedError<MoveCheck, string>(__TAURI_INVOKE("review_check_move", { fen, uci })),
+	dbQuery: (query: GameQuery) => typedError<GamePage, string>(__TAURI_INVOKE("db_query", { query })),
+	dbGame: (id: number) => typedError<DbGame, string>(__TAURI_INVOKE("db_game", { id })),
+	dbDelete: (ids: number[]) => typedError<number, string>(__TAURI_INVOKE("db_delete", { ids })),
+	dbStats: () => typedError<DbStats, string>(__TAURI_INVOKE("db_stats")),
+	dbFind: (source: string, sourceId: string) => typedError<number | null, string>(__TAURI_INVOKE("db_find", { source, sourceId })),
+	dbSaveReview: (gameId: number, review: ReviewResult) => typedError<null, string>(__TAURI_INVOKE("db_save_review", { gameId, review })),
+	/**  Import PGN files into the database. */
+	dbImportFiles: (jobId: string, paths: string[]) => typedError<ImportSummary, string>(__TAURI_INVOKE("db_import_files", { jobId, paths })),
+	/**  Import (new) games of a Lichess user. */
+	dbImportLichess: (jobId: string, username: string) => typedError<ImportSummary, string>(__TAURI_INVOKE("db_import_lichess", { jobId, username })),
+	/**  Import (new) games of a Chess.com user, month by month. */
+	dbImportChesscom: (jobId: string, username: string) => typedError<ImportSummary, string>(__TAURI_INVOKE("db_import_chesscom", { jobId, username })),
+	/**  Add games played in Grandie (saved as PGN files) to the database. */
+	dbImportGrandie: () => typedError<ImportSummary, string>(__TAURI_INVOKE("db_import_grandie")),
+	/**  Name of the opening reached by a line (deepest named position). */
+	openingName: (rootFen: string, moves: string[]) => __TAURI_INVOKE<{
+	eco: string,
+	name: string,
+} | null>("opening_name", { rootFen, moves }),
+	explorerDb: (fen: string, filter: ExplorerFilter) => typedError<ExplorerResult, string>(__TAURI_INVOKE("explorer_db", { fen, filter })),
+	/**  Moves from the Lichess explorer ("lichess" or "masters"); needs a Lichess token. */
+	explorerLichess: (db: string, fen: string, speeds: string[], ratings: number[]) => typedError<ExplorerResult, string>(__TAURI_INVOKE("explorer_lichess", { db, fen, speeds, ratings })),
+	lichessTokenStatus: () => typedError<boolean, string>(__TAURI_INVOKE("lichess_token_status")),
+	/**  Store (or with an empty string, remove) the Lichess API token in the Keychain. */
+	lichessTokenSet: (token: string) => typedError<null, string>(__TAURI_INVOKE("lichess_token_set", { token })),
+	repertoireMoves: (color: Side) => typedError<RepMove[], string>(__TAURI_INVOKE("repertoire_moves", { color })),
+	repertoireAddLine: (color: Side, moves: string[]) => typedError<number, string>(__TAURI_INVOKE("repertoire_add_line", { color, moves })),
+	repertoireRemoveMove: (id: number) => typedError<null, string>(__TAURI_INVOKE("repertoire_remove_move", { id })),
+	repertoireSetComment: (id: number, comment: string | null) => typedError<null, string>(__TAURI_INVOKE("repertoire_set_comment", { id, comment })),
+	repertoireImportPgn: (color: Side, pgn: string) => typedError<number, string>(__TAURI_INVOKE("repertoire_import_pgn", { color, pgn })),
+	repertoireExportPgn: (color: Side) => typedError<string, string>(__TAURI_INVOKE("repertoire_export_pgn", { color })),
+	repertoireStats: (color: Side) => typedError<RepertoireStats, string>(__TAURI_INVOKE("repertoire_stats", { color })),
+	/**  Cards to drill now: due reviews first, then up to `new_limit` new ones. */
+	repertoireDue: (color: "white" | "black" | null, limit: number, newLimit: number) => typedError<DrillItem[], string>(__TAURI_INVOKE("repertoire_due", { color, limit, newLimit })),
+	repertoireGrade: (color: Side, key: string, grade: Grade) => typedError<CardState, string>(__TAURI_INVOKE("repertoire_grade", { color, key, grade })),
+	puzzlesInfo: () => typedError<PuzzleInfo, string>(__TAURI_INVOKE("puzzles_info")),
+	/**
+	 *  Download the Lichess puzzle database and import it. With `filter` set,
+	 *  only well-tested, popular puzzles are kept (a third of the database).
+	 */
+	puzzlesDownload: (filter: {
+	/**  Lichess popularity, -100..100. */
+	minPopularity: number,
+	minPlays: number,
+	maxDeviation: number,
+} | null) => typedError<number, string>(__TAURI_INVOKE("puzzles_download", { filter })),
+	puzzlesThemes: () => typedError<ThemeCount[], string>(__TAURI_INVOKE("puzzles_themes")),
+	/**  The next puzzle near the user's rating (or `rating` if given). */
+	puzzleNext: (theme: string | null, rating: number | null) => typedError<{
+	id: string,
+	/**  Position before the opponent's first move. */
+	fen: string,
+	/**  Solution in UCI; the first move is the opponent's, then the user's, alternating. */
+	moves: string[],
+	rating: number,
+	deviation: number,
+	popularity: number,
+	plays: number,
+	themes: string[],
+	gameUrl: string | null,
+	opening: string | null,
+} | null, string>(__TAURI_INVOKE("puzzle_next", { theme, rating })),
+	puzzleCheck: (puzzleId: string, index: number, uci: string) => typedError<MoveVerdict, string>(__TAURI_INVOKE("puzzle_check", { puzzleId, index, uci })),
+	/**  Record the outcome of a puzzle and update the puzzle rating. */
+	puzzleFinish: (puzzleId: string, solved: boolean) => typedError<PuzzleResult, string>(__TAURI_INVOKE("puzzle_finish", { puzzleId, solved })),
+	progressSummary: () => typedError<ProgressSummary, string>(__TAURI_INVOKE("progress_summary")),
 };
 
 /** Events */
 export const events = {
 	analysisEvent: makeEvent<AnalysisEvent>("analysis-event"),
 	downloadProgress: makeEvent<DownloadProgress>("download-progress"),
+	importProgress: makeEvent<ImportProgress>("import-progress"),
 	menuAction: makeEvent<MenuAction>("menu-action"),
 	playClock: makeEvent<PlayClock>("play-clock"),
 	playUpdate: makeEvent<PlayUpdate>("play-update"),
@@ -135,6 +203,20 @@ export type BackendResult = {
 	error: string | null,
 };
 
+/**  A card's scheduling state, as stored in the database (times in unix seconds). */
+export type CardState = {
+	due: number | null,
+	stability: number | null,
+	difficulty: number | null,
+	elapsedDays: number,
+	scheduledDays: number,
+	reps: number,
+	lapses: number,
+	/**  0 new, 1 learning, 2 review, 3 relearning. */
+	state: number,
+	lastReview: number | null,
+};
+
 export type ClockState = {
 	whiteMs: number | null,
 	blackMs: number | null,
@@ -148,12 +230,39 @@ export type ClockTick = {
 
 export type ColorScheme = "auto" | "dark" | "light";
 
+export type DbGame = {
+	row: GameRow,
+	tree: GameTree,
+	review: ReviewResult | null,
+};
+
+export type DbStats = {
+	games: number,
+	mine: number,
+	reviewed: number,
+	sources: ([string, number])[],
+};
+
 export type DownloadProgress = {
 	id: string,
 	received: number | null,
 	total: number | null,
 	done: boolean,
 	error: string | null,
+};
+
+/**
+ *  One drill: reach `fen` by playing `line` from the start, then the user
+ *  must play one of `expected`.
+ */
+export type DrillItem = {
+	color: Side,
+	/**  Position key (a Zobrist hash as a string; TypeScript can't hold u64). */
+	key: string,
+	fen: string,
+	line: string[],
+	expected: ExpectedMove[],
+	isNew: boolean,
 };
 
 export type EndReason = "checkmate" | "stalemate" | "insufficientMaterial" | "threefoldRepetition" | "fiftyMoveRule" | "timeout" | "timeoutVsInsufficientMaterial" | "resignation" | "agreement" | "aborted";
@@ -176,6 +285,40 @@ export type EngineKind =
 /**  Any other UCI engine on disk. */
 "uci";
 
+export type ExpectedMove = {
+	uci: string,
+	san: string,
+};
+
+export type ExplorerFilter = {
+	/**  Only games the user played. */
+	onlyMine?: boolean,
+	/**  Only games where the user had this colour. */
+	color?: Side | null,
+};
+
+export type ExplorerMove = {
+	uci: string,
+	san: string,
+	games: number,
+	white: number,
+	draws: number,
+	black: number,
+	/**  Average rating of the players who chose the move. */
+	avgRating: number | null,
+};
+
+export type ExplorerResult = {
+	source: string,
+	fen: string,
+	total: number,
+	white: number,
+	draws: number,
+	black: number,
+	moves: ExplorerMove[],
+	opening: OpeningName | null,
+};
+
 export type GameOutcome = {
 	/**  "1-0", "0-1" or "1/2-1/2". */
 	result: string,
@@ -183,9 +326,106 @@ export type GameOutcome = {
 	reason: EndReason,
 };
 
+export type GamePage = {
+	total: number,
+	rows: GameRow[],
+	/**  Milliseconds the query took (shown so search speed is visible). */
+	elapsedMs: number | null,
+};
+
+export type GameQuality = {
+	gameId: number,
+	at: number | null,
+	opponent: string | null,
+	accuracy: number | null,
+	inaccuracies: number,
+	mistakes: number,
+	blunders: number,
+};
+
+export type GameQuery = {
+	/**  Matches player names, event and opening. */
+	text?: string | null,
+	/**  Only games where the user played this colour. */
+	color?: Side | null,
+	outcome?: UserOutcome | null,
+	onlyMine?: boolean,
+	source?: string | null,
+	speed?: string | null,
+	/**  ECO code prefix, e.g. "B" or "C50". */
+	eco?: string | null,
+	/**  Inclusive bounds, "YYYY-MM-DD". */
+	dateFrom?: string | null,
+	dateTo?: string | null,
+	position?: PositionQuery | null,
+	sort?: SortColumn | null,
+	desc?: boolean,
+	offset?: number,
+	limit?: number,
+};
+
+export type GameRow = {
+	id: number,
+	source: string,
+	white: string | null,
+	black: string | null,
+	whiteElo: number | null,
+	blackElo: number | null,
+	result: string,
+	date: string | null,
+	eco: string | null,
+	opening: string | null,
+	timeControl: string | null,
+	speed: string | null,
+	userColor: Side | null,
+	opponentLevel: string | null,
+	plyCount: number,
+	reviewed: boolean,
+	userAccuracy: number | null,
+};
+
 export type GameTree = {
 	headers: PgnHeader[],
 	nodes: TreeNode[],
+};
+
+/**  How the user did on a card. */
+export type Grade = 
+/**  Wrong move. */
+"again" | 
+/**  Right, but only after a wrong try or a long think. */
+"hard" | "good" | "easy";
+
+/**  Progress of a database import. */
+export type ImportProgress = {
+	jobId: string,
+	/**  What is happening, e.g. "Downloading from Lichess". */
+	phase: string,
+	seen: number,
+	imported: number,
+	bytes: number | null,
+};
+
+export type ImportSummary = {
+	seen: number,
+	imported: number,
+	duplicates: number,
+	/**  The first few problems (games that couldn't be read). */
+	errors: string[],
+	/**  Newest game time seen, used for incremental account sync. */
+	newest: number | null,
+};
+
+export type LevelResult = {
+	level: string,
+	name: string,
+	elo: number | null,
+	games: number,
+	wins: number,
+	draws: number,
+	losses: number,
+	/**  Performance rating against this level, if it has a rating. */
+	performance: number | null,
 };
 
 /**  A native menu item was chosen, e.g. "new_game" or "open_pgn". */
@@ -218,6 +458,14 @@ export type MoveReview = {
 	bestLine: string[],
 };
 
+export type MoveVerdict = {
+	correct: boolean,
+	/**  The opponent's answer to play next, if the puzzle continues. */
+	reply: string | null,
+	/**  The puzzle is solved. */
+	done: boolean,
+};
+
 export type NetworkDef = {
 	id: string,
 	name: string,
@@ -234,6 +482,20 @@ export type NetworkEntry = {
 } & NetworkDef;
 
 export type NetworkKind = "leela" | "maia";
+
+export type OpeningName = {
+	eco: string,
+	name: string,
+};
+
+export type OpeningStat = {
+	family: string,
+	eco: string | null,
+	games: number,
+	/**  The user's score, 0..1. */
+	score: number | null,
+	accuracy: number | null,
+};
 
 export type OpponentKind = "maia" | "leela" | "full";
 
@@ -346,6 +608,88 @@ export type PositionInfo = {
 	outcome: GameOutcome | null,
 };
 
+export type PositionQuery = {
+	/**
+	 *  For exact search a full FEN; for partial search only the piece
+	 *  placement matters (empty squares are "anything").
+	 */
+	fen: string,
+	exact: boolean,
+};
+
+export type ProgressSummary = {
+	totals: Totals,
+	levels: LevelResult[],
+	/**  Estimated playing strength over time (rolling performance in Grandie games). */
+	strength: RatingPoint[],
+	quality: GameQuality[],
+	weakestOpenings: OpeningStat[],
+	puzzleRating: Rating,
+	puzzleHistory: RatingPoint[],
+};
+
+export type Puzzle = {
+	id: string,
+	/**  Position before the opponent's first move. */
+	fen: string,
+	/**  Solution in UCI; the first move is the opponent's, then the user's, alternating. */
+	moves: string[],
+	rating: number,
+	deviation: number,
+	popularity: number,
+	plays: number,
+	themes: string[],
+	gameUrl: string | null,
+	opening: string | null,
+};
+
+export type PuzzleImportFilter = {
+	/**  Lichess popularity, -100..100. */
+	minPopularity: number,
+	minPlays: number,
+	maxDeviation: number,
+};
+
+export type PuzzleInfo = {
+	count: number,
+	rating: Rating,
+};
+
+export type PuzzleResult = {
+	before: Rating,
+	after: Rating,
+};
+
+export type Rating = {
+	rating: number | null,
+	deviation: number | null,
+	volatility: number | null,
+};
+
+export type RatingPoint = {
+	/**  Unix seconds. */
+	at: number | null,
+	rating: number | null,
+};
+
+export type RepMove = {
+	id: number,
+	parentFen: string,
+	uci: string,
+	san: string,
+	childFen: string,
+	comment: string | null,
+};
+
+export type RepertoireStats = {
+	moves: number,
+	cards: number,
+	dueNow: number,
+	newCards: number,
+	/**  Next due time (unix seconds) after the current ones. */
+	nextDue: number | null,
+};
+
 export type ReviewDepth = "quick" | "standard" | "deep";
 
 /**  Progress of a full-game review. */
@@ -421,9 +765,26 @@ export type SideSummary = {
 	blunders: number,
 };
 
+export type SortColumn = "date" | "white" | "black" | "whiteElo" | "blackElo" | "result" | "eco" | "moves";
+
+export type ThemeCount = {
+	theme: string,
+	count: number,
+};
+
 export type TimeControl = {
 	initialMs: number,
 	incrementMs: number,
+};
+
+export type Totals = {
+	games: number,
+	wins: number,
+	draws: number,
+	losses: number,
+	gamesLast30Days: number,
+	puzzlesAttempted: number,
+	puzzlesSolved: number,
 };
 
 export type TreeNode = {
@@ -449,6 +810,8 @@ export type UciOption = {
 	name: string,
 	kind: OptionKind,
 };
+
+export type UserOutcome = "win" | "loss" | "draw";
 
 /**  Win/draw/loss in per mille (W + D + L = 1000) from the side to move. */
 export type Wdl = {

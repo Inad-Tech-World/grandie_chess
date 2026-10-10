@@ -29,13 +29,18 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["app", "dmg"],
+    "targets": [
+      "app",
+      "dmg"
+    ],
     "category": "public.app-category.board-games",
     "shortDescription": "Chess training powered by Leela Chess Zero",
     "longDescription": "Grandie Chess helps you improve: play Leela and human-like Maia opponents at your level, review your games, keep a database, and train openings and tactics.",
     "copyright": "© 2026 Grandie Chess contributors. Licensed under GPL-3.0-or-later.",
     "license": "GPL-3.0-or-later",
-    "externalBin": ["binaries/lc0"],
+    "externalBin": [
+      "binaries/lc0"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -47,6 +52,15 @@
       "minimumSystemVersion": "13.0",
       "signingIdentity": "-",
       "hardenedRuntime": true
+    },
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDU1NTg2RDM5MUM2NkU2QkYKUldTLzVtWWNPVzFZVmUwMm9aNlJReG5LdGZUODd5bHMwOStQMy80ZFJIVmV6RFZiRU9lcVBMQ2sK",
+      "endpoints": [
+        "https://github.com/Inad-Tech-World/grandie_chess/releases/latest/download/latest.json"
+      ]
     }
   }
 }

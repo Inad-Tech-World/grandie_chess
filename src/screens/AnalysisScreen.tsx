@@ -148,6 +148,9 @@ export function AnalysisScreen({ analysisId, tabId }: { analysisId: string; tabI
           });
           return { review, reviewMoves: ucis, tree, autoReview: false };
         });
+        // Store the review with the game so Progress can use it.
+        const gameId = useAnalysis.getState().docs[analysisId]?.gameId;
+        if (gameId !== undefined) void commands.dbSaveReview(gameId, review);
       } catch (e) {
         if (!String(e).includes("cancelled")) notifyError("Review failed", e);
         update(analysisId, { autoReview: false });

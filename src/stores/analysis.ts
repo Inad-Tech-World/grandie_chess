@@ -11,6 +11,8 @@ export interface AnalysisDoc {
   reviewMoves?: string[];
   /** Start a review as soon as the tab opens (after a game). */
   autoReview?: boolean;
+  /** Database id of the game, so its review is stored with it. */
+  gameId?: number;
 }
 
 interface AnalysisStore {

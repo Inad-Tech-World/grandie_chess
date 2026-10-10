@@ -4,8 +4,11 @@ import { defineConfig, devices } from "@playwright/test";
 // The real app's backend is covered by `cargo test` with the fake UCI engine.
 export default defineConfig({
   testDir: "tests/e2e",
-  timeout: 30_000,
+  timeout: 45_000,
   fullyParallel: true,
+  // The Vite dev server and the browsers share the machine; more workers
+  // than this starves both and makes timings flaky.
+  workers: process.env.CI ? 2 : 3,
   reporter: [["list"]],
   use: {
     baseURL: "http://localhost:1430",

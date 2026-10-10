@@ -24,7 +24,7 @@ import { commands, notifyError, tryCommand, unwrap } from "../lib/api";
 import { describeOutcome, formatTimeControl } from "../lib/format";
 import { usePlay } from "../stores/play";
 import { useSettings } from "../stores/settings";
-import { openAnalysisFromPgn, savePgnText } from "../lib/actions";
+import { grandieGameId, openAnalysisFromPgn, savePgnText } from "../lib/actions";
 import { useApp, newId } from "../stores/app";
 
 export function PlayScreen({ sessionId }: { sessionId: number }) {
@@ -159,7 +159,8 @@ export function PlayScreen({ sessionId }: { sessionId: number }) {
   async function review() {
     reviewOpened.current = true;
     const pgn = await tryCommand(commands.playPgn(sessionId));
-    if (pgn) await openAnalysisFromPgn(pgn, `Review: ${snap!.whiteName} – ${snap!.blackName}`, { autoReview: true, atStart: true });
+    const gameId = await grandieGameId(snap!.pgnPath);
+    if (pgn) await openAnalysisFromPgn(pgn, `Review: ${snap!.whiteName} – ${snap!.blackName}`, { autoReview: true, atStart: true, gameId });
   }
 
   async function save() {

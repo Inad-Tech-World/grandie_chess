@@ -1,6 +1,7 @@
 //! The local game database (SQLite): games, a position index for search and
 //! the opening tree, linked accounts, and stored reviews.
 
+pub mod explorer;
 pub mod games;
 pub mod import;
 pub mod search;
@@ -80,6 +81,69 @@ const MIGRATIONS: &[&str] = &[
         user_blunders INTEGER,
         data TEXT NOT NULL,
         created_at INTEGER NOT NULL
+    );
+    "#,
+    // 2: opening repertoires and their spaced-repetition cards
+    r#"
+    CREATE TABLE repertoire_moves (
+        id INTEGER PRIMARY KEY,
+        color TEXT NOT NULL,
+        parent_hash INTEGER NOT NULL,
+        parent_fen TEXT NOT NULL,
+        uci TEXT NOT NULL,
+        san TEXT NOT NULL,
+        child_hash INTEGER NOT NULL,
+        child_fen TEXT NOT NULL,
+        comment TEXT,
+        created_at INTEGER NOT NULL,
+        UNIQUE (color, parent_hash, uci)
+    );
+    CREATE INDEX repertoire_moves_parent ON repertoire_moves (color, parent_hash);
+
+    CREATE TABLE repertoire_cards (
+        color TEXT NOT NULL,
+        hash INTEGER NOT NULL,
+        fen TEXT NOT NULL,
+        due INTEGER NOT NULL,
+        stability REAL NOT NULL DEFAULT 0,
+        difficulty REAL NOT NULL DEFAULT 0,
+        elapsed_days INTEGER NOT NULL DEFAULT 0,
+        scheduled_days INTEGER NOT NULL DEFAULT 0,
+        reps INTEGER NOT NULL DEFAULT 0,
+        lapses INTEGER NOT NULL DEFAULT 0,
+        state INTEGER NOT NULL DEFAULT 0,
+        last_review INTEGER,
+        PRIMARY KEY (color, hash)
+    );
+
+    CREATE TABLE repertoire_reviews (
+        id INTEGER PRIMARY KEY,
+        color TEXT NOT NULL,
+        hash INTEGER NOT NULL,
+        grade TEXT NOT NULL,
+        reviewed_at INTEGER NOT NULL
+    );
+    "#,
+    // 3: puzzle attempts and ratings
+    r#"
+    CREATE TABLE puzzle_attempts (
+        id INTEGER PRIMARY KEY,
+        puzzle_id TEXT NOT NULL,
+        solved INTEGER NOT NULL,
+        puzzle_rating INTEGER NOT NULL,
+        themes TEXT NOT NULL,
+        rating_before REAL NOT NULL,
+        rating_after REAL NOT NULL,
+        attempted_at INTEGER NOT NULL
+    );
+    CREATE INDEX puzzle_attempts_time ON puzzle_attempts (attempted_at);
+
+    CREATE TABLE ratings (
+        kind TEXT PRIMARY KEY,
+        rating REAL NOT NULL,
+        deviation REAL NOT NULL,
+        volatility REAL NOT NULL,
+        updated_at INTEGER NOT NULL
     );
     "#,
 ];

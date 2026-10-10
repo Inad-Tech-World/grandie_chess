@@ -17,7 +17,14 @@ use crate::engine::registry::{EngineConfig, EngineKind, OptionValue, Registry, L
 use crate::engine::catalog::{network_path, NetworkEntry, NetworkKind, OpponentLevel};
 use crate::engine::process::position_command;
 use crate::error::{Error, Result};
+use crate::db::explorer::{ExplorerFilter, ExplorerResult};
 use crate::db::games::{self as dbgames, DbGame, DbStats, GamePage, GameQuery};
+use crate::game::openings::{OpeningBook, OpeningName};
+use crate::game::position::Side;
+use crate::training::progress::ProgressSummary;
+use crate::training::puzzles::{self, MoveVerdict, Puzzle, PuzzleImportFilter, PuzzleResult, ThemeCount};
+use crate::training::repertoire::{self, DrillItem, RepMove, RepertoireStats};
+use crate::training::srs::{CardState, Grade};
 use crate::db::import::{self as dbimport, ImportSummary};
 use crate::events::{DownloadProgress, ImportProgress, ReviewProgress, TauriAnalysisSink, TauriPlayObserver};
 use crate::game::pgn::{parse_pgn, read_pgn_file, write_pgn, PgnParseResult};
@@ -295,6 +302,13 @@ pub fn pgn_read_file(path: String) -> Result<PgnParseResult> {
 #[specta::specta]
 pub fn pgn_write(tree: GameTree) -> String {
     write_pgn(&tree)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn file_read_text(path: String) -> Result<String> {
+    let bytes = std::fs::read(path)?;
+    Ok(String::from_utf8_lossy(&bytes).into_owned())
 }
 
 #[tauri::command]
@@ -655,4 +669,209 @@ pub fn db_import_grandie(state: State<'_, AppState>) -> Result<ImportSummary> {
     }
     tx.commit()?;
     Ok(summary)
+}
+
+// ---- openings ----
+
+/// Name of the opening reached by a line (deepest named position).
+#[tauri::command]
+#[specta::specta]
+pub fn opening_name(root_fen: String, moves: Vec<String>) -> Option<OpeningName> {
+    let start = (root_fen != crate::game::position::START_FEN).then_some(root_fen.as_str());
+    OpeningBook::get().classify(start, &moves)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn explorer_db(state: State<'_, AppState>, fen: String, filter: ExplorerFilter) -> Result<ExplorerResult> {
+    let pool = state.db.clone();
+    tokio::task::spawn_blocking(move || crate::db::explorer::explore(&pool, &fen, &filter))
+        .await
+        .map_err(|e| Error::other(e.to_string()))?
+}
+
+/// Moves from the Lichess explorer ("lichess" or "masters"); needs a Lichess token.
+#[tauri::command]
+#[specta::specta]
+pub async fn explorer_lichess(
+    state: State<'_, AppState>,
+    db: String,
+    fen: String,
+    speeds: Vec<String>,
+    ratings: Vec<u32>,
+) -> Result<ExplorerResult> {
+    let token = crate::secrets::lichess_token()?.ok_or_else(|| Error::NotFound("Add a Lichess API token in Settings to use the Lichess explorer.".into()))?;
+    crate::net::explorer::explore(&state.http, &state.explorer_cache, &token, &db, &fen, &speeds, &ratings).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn lichess_token_status() -> Result<bool> {
+    Ok(crate::secrets::lichess_token()?.is_some())
+}
+
+/// Store (or with an empty string, remove) the Lichess API token in the Keychain.
+#[tauri::command]
+#[specta::specta]
+pub fn lichess_token_set(token: String) -> Result<()> {
+    crate::secrets::set_lichess_token(token.trim())
+}
+
+// ---- repertoire ----
+
+#[tauri::command]
+#[specta::specta]
+pub fn repertoire_moves(state: State<'_, AppState>, color: Side) -> Result<Vec<RepMove>> {
+    repertoire::moves(&*state.db.get()?, color)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn repertoire_add_line(state: State<'_, AppState>, color: Side, moves: Vec<String>) -> Result<u32> {
+    repertoire::add_line(&mut *state.db.get()?, color, &moves, crate::db::now_secs())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn repertoire_remove_move(state: State<'_, AppState>, id: i32) -> Result<()> {
+    repertoire::remove_move(&mut *state.db.get()?, id, crate::db::now_secs())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn repertoire_set_comment(state: State<'_, AppState>, id: i32, comment: Option<String>) -> Result<()> {
+    repertoire::set_comment(&*state.db.get()?, id, comment.as_deref())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn repertoire_import_pgn(state: State<'_, AppState>, color: Side, pgn: String) -> Result<u32> {
+    let parsed = parse_pgn(&pgn);
+    let mut conn = state.db.get()?;
+    let mut added = 0;
+    for tree in &parsed.games {
+        added += repertoire::add_tree(&mut conn, color, tree, crate::db::now_secs())?;
+    }
+    Ok(added)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn repertoire_export_pgn(state: State<'_, AppState>, color: Side) -> Result<String> {
+    Ok(write_pgn(&repertoire::to_tree(&*state.db.get()?, color)?))
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn repertoire_stats(state: State<'_, AppState>, color: Side) -> Result<RepertoireStats> {
+    repertoire::stats(&*state.db.get()?, color, crate::db::now_secs())
+}
+
+/// Cards to drill now: due reviews first, then up to `new_limit` new ones.
+#[tauri::command]
+#[specta::specta]
+pub fn repertoire_due(state: State<'_, AppState>, color: Option<Side>, limit: u32, new_limit: u32) -> Result<Vec<DrillItem>> {
+    repertoire::due(&*state.db.get()?, color, crate::db::now_secs(), limit, new_limit)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn repertoire_grade(state: State<'_, AppState>, color: Side, key: String, grade: Grade) -> Result<CardState> {
+    repertoire::grade(&*state.db.get()?, color, &key, grade, crate::db::now_secs())
+}
+
+// ---- puzzles ----
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct PuzzleInfo {
+    pub count: u32,
+    pub rating: crate::training::glicko::Rating,
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn puzzles_info(state: State<'_, AppState>) -> Result<PuzzleInfo> {
+    Ok(PuzzleInfo { count: puzzles::count(&state.puzzles)?, rating: puzzles::rating(&*state.db.get()?)? })
+}
+
+/// Download the Lichess puzzle database and import it. With `filter` set,
+/// only well-tested, popular puzzles are kept (a third of the database).
+#[tauri::command]
+#[specta::specta]
+pub async fn puzzles_download(app: AppHandle, state: State<'_, AppState>, filter: Option<PuzzleImportFilter>) -> Result<u32> {
+    let id = "puzzles".to_string();
+    if !state.begin_download(&id) {
+        return Err(Error::other("The puzzle database is already downloading"));
+    }
+    let archive = state.paths.data_dir.join("lichess_db_puzzle.csv.zst");
+    let result: Result<u32> = async {
+        download_file(&state.http, puzzles::PUZZLE_DB_URL, &archive, None, |r, t| {
+            let _ = DownloadProgress { id: id.clone(), received: r as f64, total: t.map(|t| t as f64), done: false, error: None }.emit(&app);
+        })
+        .await?;
+        let pool = state.puzzles.clone();
+        let path = archive.clone();
+        let app2 = app.clone();
+        let kept = tokio::task::spawn_blocking(move || -> Result<u64> {
+            let file = std::fs::File::open(&path)?;
+            let decoder = zstd::Decoder::new(std::io::BufReader::new(file))?;
+            puzzles::import_csv(&pool, decoder, filter, |read, kept| {
+                let _ = ImportProgress {
+                    job_id: "puzzles".into(),
+                    phase: "Importing puzzles".into(),
+                    seen: read.min(u32::MAX as u64) as u32,
+                    imported: kept.min(u32::MAX as u64) as u32,
+                    bytes: 0.0,
+                }
+                .emit(&app2);
+            })
+        })
+        .await
+        .map_err(|e| Error::other(e.to_string()))??;
+        Ok(kept as u32)
+    }
+    .await;
+    let _ = std::fs::remove_file(&archive);
+    state.end_download(&id);
+    let _ = DownloadProgress { id: id.clone(), received: 0.0, total: None, done: true, error: result.as_ref().err().map(|e| e.to_string()) }.emit(&app);
+    result
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn puzzles_themes(state: State<'_, AppState>) -> Result<Vec<ThemeCount>> {
+    puzzles::themes(&state.puzzles)
+}
+
+/// The next puzzle near the user's rating (or `rating` if given).
+#[tauri::command]
+#[specta::specta]
+pub fn puzzle_next(state: State<'_, AppState>, theme: Option<String>, rating: Option<f64>) -> Result<Option<Puzzle>> {
+    let conn = state.db.get()?;
+    let target = rating.unwrap_or(puzzles::rating(&conn)?.rating);
+    let recent = puzzles::recent_ids(&conn, 300)?;
+    puzzles::next(&state.puzzles, target, theme.as_deref(), &recent)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn puzzle_check(state: State<'_, AppState>, puzzle_id: String, index: u32, uci: String) -> Result<MoveVerdict> {
+    puzzles::check_move(&puzzles::get(&state.puzzles, &puzzle_id)?, index as usize, &uci)
+}
+
+/// Record the outcome of a puzzle and update the puzzle rating.
+#[tauri::command]
+#[specta::specta]
+pub fn puzzle_finish(state: State<'_, AppState>, puzzle_id: String, solved: bool) -> Result<PuzzleResult> {
+    let p = puzzles::get(&state.puzzles, &puzzle_id)?;
+    puzzles::record_attempt(&*state.db.get()?, &p, solved, crate::db::now_secs())
+}
+
+// ---- progress ----
+
+#[tauri::command]
+#[specta::specta]
+pub fn progress_summary(state: State<'_, AppState>) -> Result<ProgressSummary> {
+    crate::training::progress::summary(&*state.db.get()?, &state.catalog, crate::db::now_secs())
 }

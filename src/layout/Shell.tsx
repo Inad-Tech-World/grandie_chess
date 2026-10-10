@@ -9,7 +9,10 @@ import { PlayScreen } from "../screens/PlayScreen";
 import { AnalysisScreen } from "../screens/AnalysisScreen";
 import { EnginesScreen } from "../screens/EnginesScreen";
 import { SettingsScreen } from "../screens/SettingsScreen";
-import { ComingSoon } from "../screens/ComingSoon";
+import { PuzzlesScreen } from "../screens/PuzzlesScreen";
+import { ProgressScreen } from "../screens/ProgressScreen";
+import { DatabaseScreen } from "../screens/DatabaseScreen";
+import { OpeningsScreen } from "../screens/OpeningsScreen";
 
 function Welcome() {
   return (
@@ -54,10 +57,10 @@ export function Shell() {
           {section === "boards" && <Boards />}
           {section === "engines" && <EnginesScreen />}
           {section === "settings" && <SettingsScreen />}
-          {section === "database" && <ComingSoon title="Database" phase={3} />}
-          {section === "openings" && <ComingSoon title="Openings" phase={4} />}
-          {section === "puzzles" && <ComingSoon title="Puzzles" phase={5} />}
-          {section === "progress" && <ComingSoon title="Progress" phase={5} />}
+          {section === "database" && <DatabaseScreen />}
+          {section === "openings" && <OpeningsScreen />}
+          {section === "puzzles" && <PuzzlesScreen />}
+          {section === "progress" && <ProgressScreen />}
         </div>
       </main>
     </div>

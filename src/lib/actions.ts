@@ -2,7 +2,7 @@
 
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { notifications } from "@mantine/notifications";
-import { commands, notifyError, unwrap, type GameTree } from "./api";
+import { commands, notifyError, unwrap, type GameTree, type ReviewResult, type Side } from "./api";
 import { emptyTree, header } from "./tree";
 import { activeTab, newId, useApp } from "../stores/app";
 import { useAnalysis } from "../stores/analysis";
@@ -21,15 +21,24 @@ function treeTitle(tree: GameTree, fallback: string): string {
   return fallback;
 }
 
-export function openAnalysis(tree: GameTree = emptyTree(), title?: string, current = 0, opts: { autoReview?: boolean } = {}) {
+interface OpenOptions {
+  autoReview?: boolean;
+  gameId?: number;
+  review?: ReviewResult | null;
+  orientation?: Side;
+}
+
+export function openAnalysis(tree: GameTree = emptyTree(), title?: string, current = 0, opts: OpenOptions = {}) {
   const analysisId = newId("analysis");
-  const orientation = header(tree, "GrandieUserSide") === "black" ? "black" : "white";
-  useAnalysis.getState().create(analysisId, { tree, current, orientation, autoReview: opts.autoReview });
+  const orientation = opts.orientation ?? (header(tree, "GrandieUserSide") === "black" ? "black" : "white");
+  const review = opts.review ?? undefined;
+  const reviewMoves = review ? review.moves.map((m) => m.uci) : undefined;
+  useAnalysis.getState().create(analysisId, { tree, current, orientation, autoReview: opts.autoReview, gameId: opts.gameId, review, reviewMoves });
   useApp.getState().openTab({ id: newId("tab"), kind: "analysis", analysisId, title: title ?? treeTitle(tree, "Analysis") });
   return analysisId;
 }
 
-export async function openAnalysisFromPgn(pgn: string, title?: string, opts: { autoReview?: boolean; atStart?: boolean } = {}) {
+export async function openAnalysisFromPgn(pgn: string, title?: string, opts: OpenOptions & { atStart?: boolean } = {}) {
   const parsed = await commands.pgnParse(pgn);
   if (parsed.games.length === 0) {
     notifyError("No game found", parsed.errors.join("\n") || "The PGN contains no games.");
@@ -37,7 +46,7 @@ export async function openAnalysisFromPgn(pgn: string, title?: string, opts: { a
   }
   const tree = parsed.games[0];
   const last = tree.nodes.length > 1 && !opts.atStart ? lastMainline(tree) : 0;
-  openAnalysis(tree, title, last, { autoReview: opts.autoReview });
+  openAnalysis(tree, title, last, opts);
 }
 
 function lastMainline(tree: GameTree): number {
@@ -135,4 +144,24 @@ export async function copyFen() {
   if (!fen) return;
   await navigator.clipboard.writeText(fen);
   notifications.show({ message: "FEN copied", color: "green", autoClose: 1500 });
+}
+
+/** Open a database game in an analysis tab (with its stored review, if any). */
+export async function openDbGame(id: number) {
+  try {
+    const game = await unwrap(commands.dbGame(id));
+    const orientation: Side = game.row.userColor === "black" ? "black" : "white";
+    openAnalysis(game.tree, undefined, 0, { gameId: id, review: game.review, orientation });
+  } catch (e) {
+    notifyError("Could not open the game", e);
+  }
+}
+
+/** Make sure Grandie's own saved games are in the database, and find one by its file. */
+export async function grandieGameId(pgnPath: string | null): Promise<number | undefined> {
+  await commands.dbImportGrandie();
+  if (!pgnPath) return undefined;
+  const name = pgnPath.split("/").pop() ?? pgnPath;
+  const r = await commands.dbFind("grandie", name);
+  return r.status === "ok" ? (r.data ?? undefined) : undefined;
 }

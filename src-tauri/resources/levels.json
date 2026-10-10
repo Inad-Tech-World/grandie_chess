@@ -1,5 +1,5 @@
 {
-  "note": "Elo values are approximate (Lichess-like scale), from engine matches against Maia levels and Stockfish's UCI_Elo. Weak levels keep a constant temperature (TempDecayMoves 0) so they stay human-error-prone all game. Re-estimate with `cargo run --release --bin calibrate`.",
+  "note": "Elo values are approximate (Lichess-like scale), measured with 16-game engine matches against Maia levels and Stockfish UCI_Elo (2026-10-10, see engine/BENCHMARKS.md). Weak levels keep a constant temperature (TempDecayMoves 0) so they stay error-prone all game. Re-estimate with `cargo run --profile perf --bin calibrate`.",
   "maia": [
     {
       "id": "maia-1100",
@@ -68,27 +68,27 @@
       "name": "Leela 1",
       "network": "703810",
       "nodes": 1,
-      "temperature": 2.2,
+      "temperature": 1.0,
       "tempDecayMoves": 0,
-      "elo": 800
+      "elo": 750
     },
     {
       "id": "leela-2",
       "name": "Leela 2",
       "network": "703810",
       "nodes": 1,
-      "temperature": 1.5,
+      "temperature": 0.85,
       "tempDecayMoves": 0,
-      "elo": 1050
+      "elo": 900
     },
     {
       "id": "leela-3",
       "name": "Leela 3",
       "network": "703810",
       "nodes": 1,
-      "temperature": 1.0,
+      "temperature": 0.7,
       "tempDecayMoves": 0,
-      "elo": 1300
+      "elo": 1100
     },
     {
       "id": "leela-4",
@@ -97,23 +97,23 @@
       "nodes": 1,
       "temperature": 0.65,
       "tempDecayMoves": 0,
-      "elo": 1550
+      "elo": 1450
     },
     {
       "id": "leela-5",
       "name": "Leela 5",
       "network": "703810",
       "nodes": 1,
-      "temperature": 0.4,
+      "temperature": 0.55,
       "tempDecayMoves": 0,
-      "elo": 1800
+      "elo": 1900
     },
     {
       "id": "leela-6",
       "name": "Leela 6",
-      "network": "791556",
+      "network": "703810",
       "nodes": 1,
-      "temperature": 0.25,
+      "temperature": 0.4,
       "tempDecayMoves": 0,
       "elo": 2050
     },
@@ -121,19 +121,19 @@
       "id": "leela-7",
       "name": "Leela 7",
       "network": "791556",
-      "nodes": 8,
+      "nodes": 1,
       "temperature": 0.1,
-      "tempDecayMoves": 20,
-      "elo": 2300
+      "tempDecayMoves": 0,
+      "elo": 2400
     },
     {
       "id": "leela-8",
       "name": "Leela 8",
       "network": "791556",
-      "nodes": 64,
-      "temperature": 0.0,
-      "tempDecayMoves": 0,
-      "elo": 2550
+      "nodes": 8,
+      "temperature": 0.1,
+      "tempDecayMoves": 20,
+      "elo": 2650
     }
   ]
 }
