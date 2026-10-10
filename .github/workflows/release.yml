@@ -85,3 +85,14 @@ jobs:
           releaseDraft: true
           prerelease: false
           args: --target universal-apple-darwin
+
+      # The DMG's name includes the version. A copy under a fixed name gives one
+      # download link that always serves the newest published release:
+      # https://github.com/Inad-Tech-World/grandie_chess/releases/latest/download/Grandie-Chess.dmg
+      - name: Upload the DMG under a fixed name
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          dmg=$(ls src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg)
+          cp "$dmg" "$RUNNER_TEMP/Grandie-Chess.dmg"
+          gh release upload "${{ github.ref_name }}" "$RUNNER_TEMP/Grandie-Chess.dmg" --clobber

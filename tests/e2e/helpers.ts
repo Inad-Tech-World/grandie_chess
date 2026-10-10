@@ -1,8 +1,22 @@
 import { expect, type Page } from "@playwright/test";
 
-export async function dragMove(page: Page, from: string, to: string) {
+/** The board's box once it has stopped moving: a panel appearing next to or
+ *  below the board can still be resizing it, and a drag computed from the old
+ *  box drops on the wrong square. */
+async function settledBoardBox(page: Page) {
   const board = page.locator("cg-board").first();
-  const box = (await board.boundingBox())!;
+  let prev = await board.boundingBox();
+  for (let i = 0; i < 20; i++) {
+    await page.waitForTimeout(50);
+    const box = await board.boundingBox();
+    if (prev && box && box.x === prev.x && box.y === prev.y && box.width === prev.width) return box;
+    prev = box;
+  }
+  return prev!;
+}
+
+export async function dragMove(page: Page, from: string, to: string) {
+  const box = await settledBoardBox(page);
   const sq = box.width / 8;
   const flipped = await page.locator(".cg-wrap.orientation-black").count();
   const center = (s: string) => {

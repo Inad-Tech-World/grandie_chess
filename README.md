@@ -16,7 +16,7 @@ Built with [Tauri 2](https://tauri.app) (Rust) and React. lc0 runs as a bundled 
 
 ## Install
 
-Download the latest `.dmg` from [Releases](https://github.com/Inad-Tech-World/grandie_chess/releases). Until builds are signed with an Apple Developer ID, macOS asks you to approve the app once: open it, then go to **System Settings → Privacy & Security → Open Anyway**.
+**[Download Grandie Chess for macOS](https://github.com/Inad-Tech-World/grandie_chess/releases/latest/download/Grandie-Chess.dmg)** (universal `.dmg`; older versions are on the [Releases](https://github.com/Inad-Tech-World/grandie_chess/releases) page). Until builds are signed with an Apple Developer ID, macOS asks you to approve the app once: open it, then go to **System Settings → Privacy & Security → Open Anyway**.
 
 Requires macOS 13 or later, on Apple Silicon or Intel.
 

@@ -59,22 +59,33 @@ To sign locally instead, export the same variables (with `APPLE_API_KEY_PATH` po
 
 3. Wait for the **Release** workflow. It builds universal lc0, the app and the DMG, signs the update bundle, and creates a draft release with:
    - `Grandie.Chess_<version>_universal.dmg` for new installs
+   - `Grandie-Chess.dmg`, the same DMG under a fixed name for the download link
    - `Grandie.Chess_universal.app.tar.gz` and its `.sig` for the updater
    - `latest.json`, the update manifest
 4. Edit the draft's notes and publish it. Installed copies find the update through
    `https://github.com/Inad-Tech-World/grandie_chess/releases/latest/download/latest.json`
    and offer to install it.
 
+## Download link
+
+Share this link; it always serves the DMG of the newest **published** release (drafts and pre-releases are skipped):
+
+```
+https://github.com/Inad-Tech-World/grandie_chess/releases/latest/download/Grandie-Chess.dmg
+```
+
+It returns "Not Found" until the first release is published.
+
 ## Building a release locally
 
 ```sh
 rustup target add aarch64-apple-darwin x86_64-apple-darwin
 engine/build-lc0.sh --universal
-TAURI_SIGNING_PRIVATE_KEY="$(cat ~/.tauri/grandie-chess.key)" TAURI_SIGNING_PRIVATE_KEY_PASSWORD="" \
+CI=true TAURI_SIGNING_PRIVATE_KEY="$(cat ~/.tauri/grandie-chess.key)" TAURI_SIGNING_PRIVATE_KEY_PASSWORD="" \
   pnpm tauri build --target universal-apple-darwin
 ```
 
-The DMG is written to `src-tauri/target/universal-apple-darwin/release/bundle/dmg/`.
+The DMG is written to `src-tauri/target/universal-apple-darwin/release/bundle/dmg/`. `CI=true` skips arranging the DMG window through Finder, which fails in sessions that can't control Finder (SSH, automation tools).
 
 ## Distribution notes
 
