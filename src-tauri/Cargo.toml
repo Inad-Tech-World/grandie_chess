@@ -48,7 +48,7 @@ rusqlite = { version = "0.40", features = ["bundled"] }
 r2d2 = "0.8"
 r2d2_sqlite = "0.35"
 rs-fsrs = "1.2"
-keyring = { version = "3", features = ["apple-native"] }
+keyring = { version = "3", features = ["apple-native", "windows-native"] }
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
 

@@ -12,6 +12,9 @@
 #
 # Meson and Ninja come from engine/.venv (created on first run) so no
 # system-wide installation is needed.
+#
+# On Windows, run engine/fetch-lc0-windows.ps1 instead: it installs the
+# official lc0 onnx-dml build.
 
 set -euo pipefail
 
@@ -34,7 +37,7 @@ while [ $# -gt 0 ]; do
     --universal) arches=(x86_64 arm64); shift ;;
     --prebuilt) prebuilt=1; shift ;;
     --clean) clean=1; shift ;;
-    -h|--help) sed -n '2,14p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,17p' "$0"; exit 0 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
 done

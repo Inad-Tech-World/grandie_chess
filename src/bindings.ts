@@ -18,8 +18,8 @@ export const commands = {
 	networkDownload: (id: string) => typedError<null, string>(__TAURI_INVOKE("network_download", { id })),
 	networkDelete: (id: string) => typedError<null, string>(__TAURI_INVOKE("network_delete", { id })),
 	/**
-	 *  Times every Metal GPU and the CPU, saves the fastest backend in settings
-	 *  and returns all results.
+	 *  Times every GPU and the CPU, saves the fastest backend in settings and
+	 *  returns all results.
 	 */
 	engineDetectBackend: () => typedError<BackendResult[], string>(__TAURI_INVOKE("engine_detect_backend")),
 	levelsList: () => __TAURI_INVOKE<OpponentLevel[]>("levels_list"),
@@ -45,7 +45,7 @@ export const commands = {
 	engineAdd: (path: string) => typedError<EngineConfig, string>(__TAURI_INVOKE("engine_add", { path })),
 	engineUpdate: (config: EngineConfig) => typedError<null, string>(__TAURI_INVOKE("engine_update", { config })),
 	engineRemove: (id: string) => typedError<null, string>(__TAURI_INVOKE("engine_remove", { id })),
-	/**  Download the official Stockfish release for macOS and add it as an engine. */
+	/**  Download the official Stockfish release for this platform and add it as an engine. */
 	engineInstallStockfish: () => typedError<EngineConfig, string>(__TAURI_INVOKE("engine_install_stockfish")),
 	analysisStart: (request: AnalysisRequest) => typedError<null, string>(__TAURI_INVOKE("analysis_start", { request })),
 	analysisStop: (engineId: string) => typedError<null, string>(__TAURI_INVOKE("analysis_stop", { engineId })),
@@ -78,7 +78,10 @@ export const commands = {
 	/**  Moves from the Lichess explorer ("lichess" or "masters"); needs a Lichess token. */
 	explorerLichess: (db: string, fen: string, speeds: string[], ratings: number[]) => typedError<ExplorerResult, string>(__TAURI_INVOKE("explorer_lichess", { db, fen, speeds, ratings })),
 	lichessTokenStatus: () => typedError<boolean, string>(__TAURI_INVOKE("lichess_token_status")),
-	/**  Store (or with an empty string, remove) the Lichess API token in the Keychain. */
+	/**
+	 *  Store (or with an empty string, remove) the Lichess API token in the system
+	 *  credential store (the Keychain on macOS, Credential Manager on Windows).
+	 */
 	lichessTokenSet: (token: string) => typedError<null, string>(__TAURI_INVOKE("lichess_token_set", { token })),
 	repertoireMoves: (color: Side) => typedError<RepMove[], string>(__TAURI_INVOKE("repertoire_moves", { color })),
 	repertoireAddLine: (color: Side, moves: string[]) => typedError<number, string>(__TAURI_INVOKE("repertoire_add_line", { color, moves })),

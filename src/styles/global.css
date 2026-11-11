@@ -82,6 +82,12 @@ textarea,
   border-right: 1px solid var(--hairline);
 }
 
+/* On Windows the native title bar sits above the window content, so the
+   sidebar doesn't need the room macOS leaves for the traffic lights. */
+:root[data-platform="windows"] .sidebar {
+  padding-top: 12px;
+}
+
 .sidebar-logo {
   width: 46px;
   height: 46px;

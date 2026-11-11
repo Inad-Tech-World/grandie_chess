@@ -35,10 +35,10 @@ export const theme = createTheme({
   primaryShade: { light: 7, dark: 6 },
   colors: { grandie, steel },
   fontFamily:
-    '-apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", Helvetica, Arial, sans-serif',
-  fontFamilyMonospace: '"SF Mono", ui-monospace, Menlo, Monaco, monospace',
+    '-apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", "SF Pro Text", "SF Pro Display", "Helvetica Neue", Helvetica, Arial, sans-serif',
+  fontFamilyMonospace: '"SF Mono", ui-monospace, Menlo, Monaco, Consolas, monospace',
   headings: {
-    fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", "SF Pro Display", "Helvetica Neue", sans-serif',
     fontWeight: "650",
   },
   defaultRadius: "md",

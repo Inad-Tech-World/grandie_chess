@@ -3,6 +3,7 @@ import { Button, Group, Image, Modal, Progress, Stack, Stepper, Text, TextInput,
 import { notifications } from "@mantine/notifications";
 import { commands, notifyError, unwrap, type BackendResult } from "../lib/api";
 import { formatBytes } from "../lib/format";
+import { deviceName } from "../lib/platform";
 import { downloadFraction, useDownloads } from "../stores/downloads";
 import { useSettings } from "../stores/settings";
 
@@ -81,7 +82,7 @@ export function Onboarding() {
       <Stepper active={step} onStepClick={setStep} size="sm" mb="lg" allowNextStepsSelect={false}>
         <Stepper.Step label="Welcome" />
         <Stepper.Step label="Networks" />
-        <Stepper.Step label="Your Mac" />
+        <Stepper.Step label={`Your ${deviceName}`} />
         <Stepper.Step label="You" />
       </Stepper>
 
@@ -130,7 +131,7 @@ export function Onboarding() {
       {step === 2 && (
         <Stack>
           <Text>
-            Grandie times your Mac's graphics chips and processor to find the fastest way to run Leela. This takes about a minute.
+            Grandie times your {deviceName}'s graphics chips and processor to find the fastest way to run Leela. This takes about a minute.
           </Text>
           {bench && (
             <Text fw={600}>

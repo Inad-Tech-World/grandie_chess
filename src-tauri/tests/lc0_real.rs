@@ -6,17 +6,28 @@ use std::time::Duration;
 
 use grandie_chess_lib::engine::catalog::{network_path, Catalog};
 use grandie_chess_lib::engine::lc0::{self, Lc0Config};
+use grandie_chess_lib::engine::platform::GPU_BACKEND;
 use grandie_chess_lib::engine::process::position_command;
 use grandie_chess_lib::game::position::{apply_uci, parse_fen, START_FEN};
 use grandie_chess_lib::settings::Settings;
 
 fn lc0_path() -> PathBuf {
-    let triple = if cfg!(target_arch = "aarch64") { "aarch64-apple-darwin" } else { "x86_64-apple-darwin" };
-    PathBuf::from(format!("{}/binaries/lc0-{triple}", env!("CARGO_MANIFEST_DIR")))
+    grandie_chess_lib::paths::dev_lc0()
+}
+
+/// Full strength on the GPU. `GRANDIE_GPU` picks the device; the default is
+/// the discrete GPU of an Intel MacBook Pro, or the first GPU on Windows.
+fn gpu_settings() -> Settings {
+    let default_gpu = if cfg!(windows) { "gpu=0" } else { "gpu=1" };
+    Settings {
+        backend: Some(GPU_BACKEND.into()),
+        backend_opts: Some(std::env::var("GRANDIE_GPU").unwrap_or_else(|_| default_gpu.into())),
+        ..Settings::default()
+    }
 }
 
 fn networks_dir() -> PathBuf {
-    PathBuf::from(std::env::var("HOME").unwrap()).join("Library/Application Support/com.grandie.chess/networks")
+    grandie_chess_lib::paths::default_data_dir().expect("home folder").join("networks")
 }
 
 #[tokio::test]
@@ -40,12 +51,8 @@ async fn maia_plays_a_legal_human_move_with_wdl() {
 
 #[tokio::test]
 #[ignore]
-async fn full_strength_finds_mate_in_one_on_metal() {
-    let settings = Settings {
-        backend: Some("metal".into()),
-        backend_opts: Some(std::env::var("GRANDIE_GPU").unwrap_or_else(|_| "gpu=1".into())),
-        ..Settings::default()
-    };
+async fn full_strength_finds_mate_in_one_on_the_gpu() {
+    let settings = gpu_settings();
     let weights = network_path(&networks_dir(), "791556");
     let engine = lc0::start(&lc0_path(), &Lc0Config::full(weights, &settings)).await.unwrap();
     let fen = "6k1/5ppp/8/8/8/8/5PPP/3R2K1 w - - 0 1";
@@ -58,7 +65,10 @@ async fn full_strength_finds_mate_in_one_on_metal() {
     tokio::time::sleep(Duration::from_millis(200)).await;
     let banner = lc0::backend_in_use(&engine);
     println!("backend: {banner:?}");
-    assert!(banner.is_some_and(|b| b.starts_with("metal")));
+    // The ONNX backends used on Windows don't print a banner.
+    if !cfg!(windows) {
+        assert!(banner.is_some_and(|b| b.starts_with(GPU_BACKEND)));
+    }
     engine.quit().await;
 }
 
@@ -156,11 +166,7 @@ mod review {
     #[tokio::test]
     #[ignore]
     async fn real_review_flags_the_blunder() {
-        let settings = Settings {
-            backend: Some("metal".into()),
-            backend_opts: Some(std::env::var("GRANDIE_GPU").unwrap_or_else(|_| "gpu=1".into())),
-            ..Settings::default()
-        };
+        let settings = gpu_settings();
         let config = Lc0Config::full(network_path(&networks_dir(), "791556"), &settings);
         let engine: Arc<Engine> = lc0::start(&lc0_path(), &config).await.unwrap();
         let moves: Vec<String> = ["e2e4", "e7e5", "d1h5", "b8c6", "f1c4", "g8f6", "h5f7"].iter().map(|s| s.to_string()).collect();

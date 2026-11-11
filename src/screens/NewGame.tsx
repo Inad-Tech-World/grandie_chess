@@ -18,6 +18,7 @@ import {
 import { IconChessKing, IconChessKingFilled, IconArrowsShuffle, IconPlayerPlay } from "@tabler/icons-react";
 import { commands, notifyError, unwrap, type OpponentLevel, type PlaySetup, type SideChoice, type TimeControl } from "../lib/api";
 import { formatBytes, formatTimeControl } from "../lib/format";
+import { deviceName } from "../lib/platform";
 import { useApp } from "../stores/app";
 import { downloadFraction, useDownloads } from "../stores/downloads";
 import { usePlay } from "../stores/play";
@@ -70,7 +71,7 @@ function loadSetup(): StoredSetup {
 const OPPONENT_INFO: Record<OpponentType, string> = {
   maia: "Maia networks were trained on millions of human games at each rating. They make the mistakes real players make, which is what you want to practise against.",
   leela: "Leela with a cap on how far she searches each move, plus some variety in the opening. Ratings are approximate.",
-  full: "Leela at full strength on your Mac's fastest backend. Expect to lose; use it for a challenge.",
+  full: `Leela at full strength on your ${deviceName}'s fastest backend. Expect to lose; use it for a challenge.`,
 };
 
 export function NewGame({ tabId }: { tabId: string }) {
@@ -312,7 +313,7 @@ export function NewGame({ tabId }: { tabId: string }) {
 
       <Modal opened={!!missing} onClose={() => setMissing(null)} title="Download needed" centered>
         <Text size="sm" mb="md">
-          This opponent needs a network that isn't on your Mac yet ({formatBytes(missingBytes)}). It downloads once and is stored in Grandie's
+          This opponent needs a network that isn't on your {deviceName} yet ({formatBytes(missingBytes)}). It downloads once and is stored in Grandie's
           data folder.
         </Text>
         <Stack gap="xs" mb="md">

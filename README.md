@@ -2,7 +2,7 @@
 
 # Grandie Chess
 
-A chess training app for macOS, powered by [Leela Chess Zero](https://lczero.org).
+A chess training app for macOS and Windows, powered by [Leela Chess Zero](https://lczero.org).
 
 - **Play** human-like [Maia](https://maiachess.com) opponents (1100–2200) and Leela at eight calibrated strengths, with clocks, hints and takebacks.
 - **Review** every game automatically: accuracy, mistakes and blunders, the better move, and "retry this position".
@@ -12,15 +12,27 @@ A chess training app for macOS, powered by [Leela Chess Zero](https://lczero.org
 - **Solve puzzles** from the Lichess puzzle database with a Glicko-2 puzzle rating.
 - **Track progress**: strength against each level, accuracy over time, weakest openings.
 
-Built with [Tauri 2](https://tauri.app) (Rust) and React. lc0 runs as a bundled helper process on the Mac's GPU through Metal.
+Built with [Tauri 2](https://tauri.app) (Rust) and React. lc0 runs as a bundled helper process on the GPU: through Metal on a Mac, and through DirectML on Windows (any DirectX 12 graphics card), with a CPU fallback.
 
 ## Install
 
-**[Download Grandie Chess for macOS](https://github.com/Inad-Tech-World/grandie_chess/releases/latest/download/Grandie-Chess.dmg)** (universal `.dmg`; older versions are on the [Releases](https://github.com/Inad-Tech-World/grandie_chess/releases) page). Until builds are signed with an Apple Developer ID, macOS asks you to approve the app once: open it, then go to **System Settings → Privacy & Security → Open Anyway**.
+Older versions are on the [Releases](https://github.com/Inad-Tech-World/grandie_chess/releases) page.
+
+### macOS
+
+**[Download Grandie Chess for macOS](https://github.com/Inad-Tech-World/grandie_chess/releases/latest/download/Grandie-Chess.dmg)** (universal `.dmg`). Until builds are signed with an Apple Developer ID, macOS asks you to approve the app once: open it, then go to **System Settings → Privacy & Security → Open Anyway**.
 
 Requires macOS 13 or later, on Apple Silicon or Intel.
 
+### Windows
+
+**[Download Grandie Chess for Windows](https://github.com/Inad-Tech-World/grandie_chess/releases/latest/download/Grandie-Chess-Setup.exe)** (64-bit installer; no administrator rights needed). Until builds are code-signed, Windows SmartScreen may warn about an unknown publisher: choose **More info → Run anyway**.
+
+Requires Windows 10 (version 1809 or later) or Windows 11, 64-bit. A DirectX 12 graphics card makes full-strength analysis much faster; without one, Leela runs on the processor.
+
 ## Build from source
+
+### macOS
 
 You need Xcode (or its command-line tools), Python 3, Rust (stable, 1.97 or later), Node.js 22.12 or later, and pnpm.
 
@@ -32,12 +44,25 @@ pnpm install
 pnpm tauri dev               # run the app in development mode
 ```
 
+### Windows
+
+You need the Visual Studio Build Tools with the "Desktop development with C++" workload, Rust (stable, 1.97 or later), Node.js 22.12 or later, and pnpm. The submodule isn't needed: Windows uses the official lc0 build.
+
+```powershell
+git clone https://github.com/Inad-Tech-World/grandie_chess.git
+cd grandie_chess
+powershell -ExecutionPolicy Bypass -File engine\fetch-lc0-windows.ps1   # downloads lc0 and its DLLs into src-tauri\binaries
+pnpm install
+pnpm tauri dev
+```
+
 Other useful commands:
 
 | Command | What it does |
 |---|---|
 | `engine/build-lc0.sh --universal` | Build lc0 for Apple Silicon and Intel and join them |
 | `engine/build-lc0.sh --prebuilt` | Use the official universal lc0 v0.32.0 binary instead of building |
+| `pwsh engine/fetch-lc0-windows.ps1` | Windows: install the official lc0 v0.32.1 `onnx-dml` build and its DLLs |
 | `pnpm test` | Frontend unit tests (Vitest) |
 | `pnpm e2e` | End-to-end UI tests in Chromium against a mock backend (Playwright) |
 | `cd src-tauri && cargo test --workspace` | Rust tests, including games against a scripted fake engine |
@@ -45,6 +70,7 @@ Other useful commands:
 | `cd src-tauri && cargo test --test lc0_real -- --ignored` | Tests against the real lc0 and downloaded networks |
 | `cd src-tauri && cargo run --profile perf -p grandie-dev-tools --bin calibrate -- --a leela-4 --b maia-1500` | Estimate an opponent level's rating with engine matches |
 | `pnpm tauri build --target universal-apple-darwin` | Build the universal app and DMG |
+| `pnpm tauri build` (on Windows) | Build the Windows installer (`src-tauri\target\release\bundle\nsis\`) |
 
 See [`engine/BENCHMARKS.md`](engine/BENCHMARKS.md) for engine speed on an Intel Mac, and [`docs/RELEASING.md`](docs/RELEASING.md) for signing, notarisation and auto-updates.
 
@@ -52,7 +78,7 @@ See [`engine/BENCHMARKS.md`](engine/BENCHMARKS.md) for engine speed on an Intel 
 
 | Path | Contents |
 |---|---|
-| `engine/` | lc0 (git submodule) and its build script |
+| `engine/` | lc0 (git submodule), its macOS build script and the Windows download script |
 | `src-tauri/src/engine/` | UCI process manager, lc0 configuration, network catalogue, backend benchmark |
 | `src-tauri/src/game/` | Rules (shakmaty), play sessions, clocks, PGN, opening names |
 | `src-tauri/src/analysis/` | Live analysis, game review, accuracy and move classification |

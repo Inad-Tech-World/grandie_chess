@@ -9,6 +9,10 @@ import "./styles/global.css";
 import "./styles/boards.css";
 import "./styles/pieces.css";
 import App from "./App";
+import { isMac } from "./lib/platform";
+
+// Lets the stylesheets adjust for the window frame of each platform.
+document.documentElement.dataset.platform = isMac ? "mac" : "windows";
 
 async function boot() {
   // Browser previews and Playwright tests run against a mock backend.

@@ -25,12 +25,19 @@ jobs:
           # Intel.
           - runner: macos-15-intel
             target: x86_64-apple-darwin
+          # Windows x64, with the official lc0 onnx-dml build.
+          - runner: windows-latest
+            target: x86_64-pc-windows-msvc
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 75
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: recursive
+          # Only the macOS jobs build lc0 from the submodule.
+          submodules: ${{ runner.os == 'macOS' && 'recursive' || 'false' }}
 
       - uses: pnpm/action-setup@v4
         with:
@@ -48,21 +55,37 @@ jobs:
 
       # lc0 is rebuilt only when the pinned submodule commit or the build script changes.
       - name: lc0 revision
+        if: runner.os == 'macOS'
         id: lc0-rev
         run: echo "sha=$(git rev-parse HEAD:engine/lc0)" >> "$GITHUB_OUTPUT"
       - name: Cache lc0 build
+        if: runner.os == 'macOS'
         id: lc0-cache
         uses: actions/cache@v4
         with:
           path: src-tauri/binaries
           key: lc0-${{ matrix.target }}-${{ steps.lc0-rev.outputs.sha }}-${{ hashFiles('engine/build-lc0.sh') }}
       - name: Build lc0
-        if: steps.lc0-cache.outputs.cache-hit != 'true'
+        if: runner.os == 'macOS' && steps.lc0-cache.outputs.cache-hit != 'true'
         run: engine/build-lc0.sh
       - name: Check lc0 binary
+        if: runner.os == 'macOS'
         run: |
           lipo -info src-tauri/binaries/lc0-${{ matrix.target }}
           vtool -show-build src-tauri/binaries/lc0-${{ matrix.target }} | grep -E "minos|platform"
+
+      # Windows uses the official lc0 build; the script pins its version and hashes.
+      - name: Cache lc0 download (Windows)
+        if: runner.os == 'Windows'
+        id: lc0-win-cache
+        uses: actions/cache@v4
+        with:
+          path: src-tauri/binaries
+          key: lc0-${{ matrix.target }}-${{ hashFiles('engine/fetch-lc0-windows.ps1') }}
+      - name: Fetch lc0 (Windows)
+        if: runner.os == 'Windows' && steps.lc0-win-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: ./engine/fetch-lc0-windows.ps1
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
@@ -82,7 +105,9 @@ jobs:
       - name: TypeScript bindings are up to date
         run: git diff --exit-code src/bindings.ts
 
+      # The UI flows don't depend on the platform; one OS is enough for them.
       - name: End-to-end tests (UI against the mock backend)
+        if: runner.os == 'macOS'
         run: |
           pnpm exec playwright install --with-deps chromium
           pnpm e2e

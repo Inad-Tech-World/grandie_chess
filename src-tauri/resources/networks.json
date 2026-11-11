@@ -6,7 +6,7 @@
       "kind": "leela",
       "url": "https://storage.lczero.org/files/networks-contrib/t1-256x10-distilled-swa-2432500.pb.gz",
       "size": 37118673,
-      "description": "Small transformer network. Strong analysis on most Macs; the recommended full-strength net when the GPU benchmark is fast enough."
+      "description": "Small transformer network. Strong analysis on most computers; the recommended full-strength net when the GPU benchmark is fast enough."
     },
     {
       "id": "791556",
@@ -14,7 +14,7 @@
       "kind": "leela",
       "url": "https://storage.lczero.org/files/networks/f404e156ceb2882470fd8c032b8754af0fa0b71168328912eaef14671a256e34",
       "size": 18648209,
-      "description": "Classic residual network, lc0's long-time default. Fast on Intel Macs and on the CPU."
+      "description": "Classic residual network, lc0's long-time default. Fast on older GPUs and on the CPU."
     },
     {
       "id": "703810",
@@ -30,7 +30,7 @@
       "kind": "leela",
       "url": "https://storage.lczero.org/files/networks-contrib/t1-512x15x8h-distilled-swa-3395000.pb.gz",
       "size": 149758071,
-      "description": "Larger transformer network. Best on Apple Silicon."
+      "description": "Larger transformer network. Best on Apple Silicon or a strong graphics card."
     },
     {
       "id": "bt4-it332",
@@ -38,7 +38,7 @@
       "kind": "leela",
       "url": "https://storage.lczero.org/files/networks-contrib/BT4-1024x15x32h-swa-6147500-policytune-332.pb.gz",
       "size": 382645315,
-      "description": "Leela's strongest network. Needs a fast Apple Silicon GPU."
+      "description": "Leela's strongest network. Needs a fast GPU (high-end Apple Silicon or a gaming graphics card)."
     },
     {
       "id": "maia-1100",

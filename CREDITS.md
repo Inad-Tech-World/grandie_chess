@@ -6,11 +6,21 @@ Grandie Chess is free software, released under the **GNU General Public License 
 
 | Component | Authors | Licence | How it's used |
 |---|---|---|---|
-| [Leela Chess Zero (lc0)](https://github.com/LeelaChessZero/lc0) | The LCZero Authors | GPL-3.0-or-later (with an NVIDIA linking exception that does not apply to this build) | Bundled engine, built from source (`engine/lc0`) |
+| [Leela Chess Zero (lc0)](https://github.com/LeelaChessZero/lc0) | The LCZero Authors | GPL-3.0-or-later (with an NVIDIA linking exception that does not apply to these builds) | Bundled engine. macOS: built from source (`engine/lc0`). Windows: the official v0.32.1 `onnx-dml` release, whose source is the same tag of `engine/lc0` |
 | Leela networks (e.g. 791556, 703810, T1, BT4) | The LCZero project and contributors | Not stated; downloaded at runtime from `storage.lczero.org`, not redistributed | Downloaded by the user from the Engines screen |
 | [Maia Chess](https://github.com/CSSLab/maia-chess) networks 1100–1900 | CSSLab, University of Toronto | GPL-3.0 | Downloaded at runtime from the official GitHub release |
 | Maia 2200 (community) | [CallOn84](https://github.com/CallOn84/LeelaNets) | GPL-3.0 | Optional runtime download |
 | [Stockfish](https://stockfishchess.org) | The Stockfish developers | GPL-3.0 | Optional runtime download of the official release |
+
+## Windows runtime components
+
+Bundled with lc0 in the Windows build only. Their licence texts are installed in the `licenses` folder of the app.
+
+| Component | Authors | Licence | How it's used |
+|---|---|---|---|
+| [ONNX Runtime](https://onnxruntime.ai) (`onnxruntime.dll`) | Microsoft | MIT | Runs Leela's networks: on the CPU, and on the GPU through DirectML |
+| [DirectML](https://github.com/microsoft/DirectML) (`DirectML.dll`) | Microsoft | Microsoft Software License Terms (redistributable in Windows applications) | GPU acceleration on any DirectX 12 graphics card |
+| Microsoft Visual C++ runtime (`msvcp140*.dll`, `vcruntime140*.dll`) | Microsoft | Visual Studio redistributable terms | Needed by lc0 and ONNX Runtime |
 
 ## Chess libraries
 

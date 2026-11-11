@@ -1,15 +1,15 @@
-//! Picks the fastest lc0 backend on this Mac by timing raw network
-//! evaluation (`lc0 backendbench`) on every Metal GPU and on the CPU.
-//! lc0's default GPU is not always the fast one: on Intel MacBook Pros it is
-//! usually the integrated GPU.
+//! Picks the fastest lc0 backend on this computer by timing raw network
+//! evaluation (`lc0 backendbench`) on every GPU (Metal on macOS, DirectML on
+//! Windows) and on the CPU. lc0's default GPU is not always the fast one: on
+//! Intel MacBook Pros and on many Windows laptops it is the integrated GPU.
 
 use std::path::Path;
 use std::process::Stdio;
 use std::time::Duration;
 
+use super::platform::{cpu_benchmark_opts, engine_command, CPU_BACKEND, GPU_BACKEND};
 use serde::{Deserialize, Serialize};
 use specta::Type;
-use tokio::process::Command;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
@@ -24,15 +24,15 @@ pub struct BackendResult {
 }
 
 pub fn candidates() -> Vec<(String, Option<String>)> {
-    let mut list: Vec<(String, Option<String>)> = (0..3).map(|gpu| ("metal".to_string(), Some(format!("gpu={gpu}")))).collect();
-    list.push(("blas".into(), None));
+    let mut list: Vec<(String, Option<String>)> = (0..3).map(|gpu| (GPU_BACKEND.to_string(), Some(format!("gpu={gpu}")))).collect();
+    list.push((CPU_BACKEND.into(), cpu_benchmark_opts()));
     list
 }
 
 /// Benchmark one backend. Returns a result with `error` set if lc0 fails
 /// (for example a GPU index that doesn't exist).
 pub async fn run_one(lc0: &Path, weights: &Path, backend: &str, opts: Option<&str>) -> BackendResult {
-    let mut cmd = Command::new(lc0);
+    let mut cmd = engine_command(lc0);
     cmd.arg("backendbench")
         .arg(format!("--weights={}", weights.display()))
         .arg(format!("--backend={backend}"))

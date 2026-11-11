@@ -12,10 +12,11 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::process::{Child, ChildStdin, Command};
+use tokio::process::{Child, ChildStdin};
 use tokio::sync::broadcast;
 use tokio::sync::broadcast::error::RecvError;
 
+use super::platform::engine_command;
 use super::uci::{parse_line, InfoLine, UciMessage, UciOption};
 use crate::error::{Error, Result};
 use crate::game::position::START_FEN;
@@ -59,7 +60,7 @@ impl std::fmt::Debug for Engine {
 impl Engine {
     /// Start the engine and complete the `uci` handshake.
     pub async fn spawn(path: &Path, args: &[String]) -> Result<Arc<Engine>> {
-        let mut cmd = Command::new(path);
+        let mut cmd = engine_command(path);
         cmd.args(args).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(true);
         if let Some(dir) = path.parent() {
             cmd.current_dir(dir);

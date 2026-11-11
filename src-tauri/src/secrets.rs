@@ -1,4 +1,5 @@
-//! Secrets kept in the macOS Keychain (never in settings.json).
+//! Secrets kept in the system credential store (never in settings.json): the
+//! Keychain on macOS, Credential Manager on Windows.
 
 use crate::error::{Error, Result};
 
@@ -6,7 +7,7 @@ const SERVICE: &str = "com.grandie.chess";
 const LICHESS_TOKEN: &str = "lichess-api-token";
 
 fn entry(name: &str) -> Result<keyring::Entry> {
-    keyring::Entry::new(SERVICE, name).map_err(|e| Error::other(format!("Keychain unavailable: {e}")))
+    keyring::Entry::new(SERVICE, name).map_err(|e| Error::other(format!("the credential store is unavailable: {e}")))
 }
 
 pub fn lichess_token() -> Result<Option<String>> {

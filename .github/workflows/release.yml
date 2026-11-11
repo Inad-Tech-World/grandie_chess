@@ -1,7 +1,8 @@
 name: Release
 
-# Push a tag like v0.2.0 to build the universal app and publish a draft
-# GitHub release with the DMG and the updater manifest (latest.json).
+# Push a tag like v0.2.0 to build the universal macOS app and the Windows
+# installer, and publish them in one draft GitHub release with the updater
+# manifest (latest.json) covering both platforms.
 on:
   push:
     tags: ["v*"]
@@ -10,8 +11,14 @@ on:
 permissions:
   contents: write
 
+env:
+  RELEASE_BODY: >-
+    See the assets below. macOS: on first launch of an unsigned build, approve it in
+    System Settings → Privacy & Security. Windows: if SmartScreen warns about an unknown
+    publisher, choose More info → Run anyway.
+
 jobs:
-  release:
+  release-macos:
     runs-on: macos-15
     timeout-minutes: 120
     steps:
@@ -81,7 +88,7 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: Grandie Chess ${{ github.ref_name }}
-          releaseBody: See the assets below. On first launch of an unsigned build, approve it in System Settings → Privacy & Security.
+          releaseBody: ${{ env.RELEASE_BODY }}
           releaseDraft: true
           prerelease: false
           args: --target universal-apple-darwin
@@ -96,3 +103,78 @@ jobs:
           dmg=$(ls src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg)
           cp "$dmg" "$RUNNER_TEMP/Grandie-Chess.dmg"
           gh release upload "${{ github.ref_name }}" "$RUNNER_TEMP/Grandie-Chess.dmg" --clobber
+
+  release-windows:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # The official lc0 build is downloaded, so the submodule isn't needed.
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Fetch lc0
+        shell: pwsh
+        run: ./engine/fetch-lc0-windows.ps1
+
+      - run: pnpm install --frozen-lockfile
+
+      # Builds the NSIS installer and its updater signature, and adds the
+      # windows-x86_64 entry to the draft's latest.json.
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: Grandie Chess ${{ github.ref_name }}
+          releaseBody: ${{ env.RELEASE_BODY }}
+          releaseDraft: true
+          prerelease: false
+
+      # A copy of the installer under a fixed name for a download link that
+      # always serves the newest published release:
+      # https://github.com/Inad-Tech-World/grandie_chess/releases/latest/download/Grandie-Chess-Setup.exe
+      - name: Upload the installer under a fixed name
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          installers=(src-tauri/target/release/bundle/nsis/*-setup.exe)
+          mkdir -p release-upload
+          cp "${installers[0]}" release-upload/Grandie-Chess-Setup.exe
+          gh release upload "${{ github.ref_name }}" release-upload/Grandie-Chess-Setup.exe --clobber
+
+  # Both jobs add to the same draft. Catch the rare case where they raced and
+  # created two drafts, or one overwrote the other's latest.json entry.
+  check-release:
+    needs: [release-macos, release-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - name: One draft, with both platforms in latest.json
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          count=$(gh release list -R "$GITHUB_REPOSITORY" --limit 50 --json tagName --jq "[.[] | select(.tagName == \"$TAG\")] | length")
+          if [ "$count" != 1 ]; then
+            echo "::error::expected one release for $TAG, found $count"
+            exit 1
+          fi
+          gh release download "$TAG" -R "$GITHUB_REPOSITORY" -p latest.json -D "$RUNNER_TEMP"
+          jq '.platforms | keys' "$RUNNER_TEMP/latest.json"
+          jq -e '.platforms | keys | (any(startswith("darwin-")) and any(startswith("windows-x86_64")))' "$RUNNER_TEMP/latest.json" > /dev/null \
+            || { echo "::error::latest.json is missing macOS or Windows"; exit 1; }

@@ -8,6 +8,7 @@ import { commands, notifyError, unwrap, type DbStats, type GameQuery, type GameR
 import { ImportModal } from "../database/ImportModal";
 import { PositionSearchModal } from "../database/PositionSearchModal";
 import { openDbGame } from "../lib/actions";
+import { isMac } from "../lib/platform";
 
 const PAGE = 200;
 
@@ -227,7 +228,7 @@ export function DatabaseScreen() {
                     role="row"
                     data-selected={selected.has(row.id)}
                     style={{ position: "absolute", top: 0, left: 0, right: 0, transform: `translateY(${item.start}px)` }}
-                    onClick={(e) => (e.metaKey || e.shiftKey ? toggle(row.id, true) : toggle(row.id, false))}
+                    onClick={(e) => (e.metaKey || e.ctrlKey || e.shiftKey ? toggle(row.id, true) : toggle(row.id, false))}
                     onDoubleClick={() => void openDbGame(row.id)}
                     title="Double-click to open"
                   >
@@ -263,7 +264,7 @@ export function DatabaseScreen() {
           {elapsed !== null ? ` · ${elapsed < 1 ? "<1" : Math.round(elapsed)} ms` : ""}
         </Text>
         <Text size="xs" c="dimmed">
-          Double-click a game to open it · ⌘-click to select several
+          Double-click a game to open it · {isMac ? "⌘" : "Ctrl"}-click to select several
         </Text>
       </Group>
 

@@ -4,6 +4,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { notifications } from "@mantine/notifications";
 import { commands, tryCommand, type AppInfo } from "../lib/api";
 import { useSettings } from "../stores/settings";
+import { credentialStore } from "../lib/platform";
 
 const BOARD_THEMES = [
   { id: "brown", label: "Brown", light: "#f0d9b5", dark: "#b58863" },
@@ -32,7 +33,7 @@ export function SettingsScreen() {
     if (ok === undefined) return;
     setHasToken(value.trim().length > 0);
     setToken("");
-    notifications.show({ color: "green", message: value ? "Lichess token saved in your Keychain" : "Lichess token removed" });
+    notifications.show({ color: "green", message: value ? `Lichess token saved in your ${credentialStore}` : "Lichess token removed" });
   }
 
   return (

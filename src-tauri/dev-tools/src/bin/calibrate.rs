@@ -8,7 +8,7 @@
 //! cargo run --profile perf -p grandie-dev-tools --bin calibrate -- --a leela-7 --b stockfish:2000
 //!
 //! `stockfish:<elo>` uses Stockfish with UCI_LimitStrength as the anchor.
-//! Options: --lc0 <path> (default: src-tauri/binaries/lc0-<triple>),
+//! Options: --lc0 <path> (default: the development lc0, see `paths::dev_lc0`),
 //! --networks <dir> (default: the app's networks folder), --max-plies <n>,
 //! --stockfish <path> (default: the copy installed by the app).
 
@@ -34,18 +34,16 @@ struct Args {
 
 fn parse_args() -> Args {
     let mut args = std::env::args().skip(1);
-    let home = std::env::var("HOME").unwrap_or_default();
-    let triple = if cfg!(target_arch = "aarch64") { "aarch64-apple-darwin" } else { "x86_64-apple-darwin" };
+    let data = grandie_chess_lib::paths::default_data_dir().unwrap_or_default();
+    let stockfish = if cfg!(windows) { "stockfish-windows-x86-64-universal.exe" } else { "stockfish-macos-universal" };
     let mut out = Args {
         a: "leela-3".into(),
         b: "maia-1500".into(),
         games: 10,
         max_plies: 300,
-        lc0: PathBuf::from(format!("{}/../binaries/lc0-{triple}", env!("CARGO_MANIFEST_DIR"))),
-        networks: PathBuf::from(format!("{home}/Library/Application Support/com.grandie.chess/networks")),
-        stockfish: PathBuf::from(format!(
-            "{home}/Library/Application Support/com.grandie.chess/engines/stockfish/stockfish/stockfish-macos-universal"
-        )),
+        lc0: grandie_chess_lib::paths::dev_lc0(),
+        networks: data.join("networks"),
+        stockfish: data.join("engines").join("stockfish").join("stockfish").join(stockfish),
     };
     while let Some(flag) = args.next() {
         let value = args.next().unwrap_or_default();

@@ -1,6 +1,7 @@
 import { Anchor, Group, Image, Kbd, Modal, Stack, Table, Text } from "@mantine/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { create } from "zustand";
+import { isMac, modKey, shiftKey } from "../lib/platform";
 
 type HelpModal = "shortcuts" | "credits" | null;
 
@@ -10,14 +11,14 @@ export const useHelp = create<{ open: HelpModal; show: (m: HelpModal) => void }>
 }));
 
 const SHORTCUTS: [string[], string][] = [
-  [["⌘", "N"], "New game"],
-  [["⌘", "⇧", "N"], "New analysis board"],
-  [["⌘", "O"], "Open PGN"],
-  [["⌘", "S"], "Save the current game as PGN"],
-  [["⌘", "W"], "Close the current tab"],
-  [["⌘", ","], "Settings"],
-  [["⌘", "⇧", "C"], "Copy the position (FEN)"],
-  [["⌘", "⇧", "V"], "Paste a FEN or PGN"],
+  [[modKey, "N"], "New game"],
+  [[modKey, shiftKey, "N"], "New analysis board"],
+  [[modKey, "O"], "Open PGN"],
+  [[modKey, "S"], "Save the current game as PGN"],
+  [[modKey, "W"], "Close the current tab"],
+  [[modKey, ","], "Settings"],
+  [[modKey, shiftKey, "C"], "Copy the position (FEN)"],
+  [[modKey, shiftKey, "V"], "Paste a FEN or PGN"],
   [["←", "→"], "Previous / next move"],
   [["↑", "↓"], "Start / end of the line"],
   [["Space"], "Start or stop the engine (analysis)"],
@@ -32,6 +33,7 @@ const LINKS: [string, string][] = [
   ["Lichess puzzles and opening names (CC0)", "https://database.lichess.org"],
   ["Piece sets from Lichess (GPL, Apache, MIT, CC0)", "https://github.com/lichess-org/lila/blob/master/COPYING.md"],
   ["Tauri, React, Mantine, Recharts (MIT)", "https://tauri.app"],
+  ...(isMac ? [] : ([["ONNX Runtime (MIT) and DirectML, which run Leela on Windows", "https://onnxruntime.ai"]] as [string, string][])),
   ["Inspired by En Croissant (GPL-3.0)", "https://github.com/franciscoBSalgueiro/en-croissant"],
 ];
 

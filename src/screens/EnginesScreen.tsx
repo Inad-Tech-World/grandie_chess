@@ -7,19 +7,30 @@ import { useEngines } from "../stores/engines";
 import { formatBytes } from "../lib/format";
 import { downloadFraction, useDownloads } from "../stores/downloads";
 import { useSettings } from "../stores/settings";
+import { isMac } from "../lib/platform";
 
-const BACKENDS: { value: string; label: string; backend: string | null; opts: string | null }[] = [
+type BackendChoice = { value: string; label: string; backend: string | null; opts: string | null };
+
+// The lc0 build differs by platform: Metal and Accelerate on macOS, DirectML
+// and ONNX Runtime on Windows (see src-tauri/src/engine/platform.rs).
+const GPU = isMac ? { backend: "metal", name: "Metal" } : { backend: "onnx-dml", name: "DirectML" };
+// ONNX Runtime uses one CPU thread unless told otherwise; this matches the benchmark.
+const ONNX_CPU_THREADS = Math.max(1, (typeof navigator === "undefined" ? 2 : navigator.hardwareConcurrency || 2) - 1);
+
+const BACKENDS: BackendChoice[] = [
   { value: "auto", label: "Automatic (lc0 chooses)", backend: null, opts: null },
-  { value: "metal-0", label: "Metal, GPU 0", backend: "metal", opts: "gpu=0" },
-  { value: "metal-1", label: "Metal, GPU 1", backend: "metal", opts: "gpu=1" },
-  { value: "metal-2", label: "Metal, GPU 2", backend: "metal", opts: "gpu=2" },
-  { value: "blas", label: "CPU (Accelerate)", backend: "blas", opts: null },
-  { value: "eigen", label: "CPU (Eigen)", backend: "eigen", opts: null },
+  ...[0, 1, 2].map((i) => ({ value: `gpu-${i}`, label: `${GPU.name}, GPU ${i}`, backend: GPU.backend, opts: `gpu=${i}` })),
+  ...(isMac
+    ? [
+        { value: "blas", label: "CPU (Accelerate)", backend: "blas", opts: null },
+        { value: "eigen", label: "CPU (Eigen)", backend: "eigen", opts: null },
+      ]
+    : [{ value: "onnx-cpu", label: "CPU (ONNX Runtime)", backend: "onnx-cpu", opts: `threads=${ONNX_CPU_THREADS}` }]),
 ];
 
 function backendKey(backend: string | null, opts: string | null): string {
   if (!backend) return "auto";
-  if (backend === "metal") return `metal-${(opts ?? "gpu=0").replace("gpu=", "")}`;
+  if (backend === GPU.backend) return `gpu-${(opts ?? "gpu=0").replace("gpu=", "")}`;
   return backend;
 }
 
@@ -162,7 +173,7 @@ export function EnginesScreen() {
             </Group>
             <Text size="sm" c="dimmed" mt={4}>
               Backend: <b>{backendLabel}</b>
-              {info && ` · ${info.arch === "aarch64" ? "Apple Silicon" : "Intel"} Mac`}
+              {info && ` · ${isMac ? `${info.arch === "aarch64" ? "Apple Silicon" : "Intel"} Mac` : `Windows (${info.arch === "aarch64" ? "Arm64" : "x64"})`}`}
             </Text>
             {!info?.lc0Path && (
               <Text size="sm" c="red" mt={4}>

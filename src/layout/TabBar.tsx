@@ -1,6 +1,7 @@
 import { ActionIcon, CloseButton, Tooltip } from "@mantine/core";
 import { IconChessKnight, IconMicroscope, IconPlayerPlay, IconPlus } from "@tabler/icons-react";
 import { closeTab, openNewGame } from "../lib/actions";
+import { shortcut } from "../lib/platform";
 import { useApp, type Tab } from "../stores/app";
 import { usePlay } from "../stores/play";
 
@@ -42,7 +43,7 @@ export function TabBar() {
           />
         </div>
       ))}
-      <Tooltip label="New game (⌘N)">
+      <Tooltip label={`New game (${shortcut("mod", "N")})`}>
         <ActionIcon variant="subtle" color="gray" size="sm" mb={5} ml={4} onClick={openNewGame} aria-label="New game">
           <IconPlus size={15} />
         </ActionIcon>

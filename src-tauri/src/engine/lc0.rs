@@ -5,6 +5,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use super::catalog::{OpponentKind, OpponentLevel};
+use super::platform::CPU_BACKEND;
 use super::process::Engine;
 use crate::error::{Error, Result};
 use crate::settings::Settings;
@@ -45,7 +46,7 @@ impl Lc0Config {
             OpponentKind::Maia => Lc0Config {
                 weights,
                 // One node per move: the CPU is instant and avoids GPU start-up cost.
-                backend: Some("blas".into()),
+                backend: Some(CPU_BACKEND.into()),
                 threads: Some(1),
                 minibatch_size: Some(1),
                 max_prefetch: Some(0),
@@ -58,7 +59,7 @@ impl Lc0Config {
                 let small = level.nodes.unwrap_or(1) <= 16;
                 Lc0Config {
                     weights,
-                    backend: if small { Some("blas".into()) } else { settings.backend.clone() },
+                    backend: if small { Some(CPU_BACKEND.into()) } else { settings.backend.clone() },
                     backend_opts: if small { None } else { settings.backend_opts.clone() },
                     threads: if small { Some(1) } else { settings.threads },
                     minibatch_size: small.then_some(1),
@@ -123,7 +124,8 @@ pub async fn start(path: &Path, config: &Lc0Config) -> Result<Arc<Engine>> {
     Ok(engine)
 }
 
-/// Backend lc0 reports on stderr, e.g. "metal (AMD Radeon Pro 560X)".
+/// Backend lc0 reports on stderr, e.g. "metal (AMD Radeon Pro 560X)". Not
+/// every backend prints this banner (the ONNX ones don't).
 pub fn backend_in_use(engine: &Engine) -> Option<String> {
     engine.stderr_lines().iter().rev().find_map(|line| parse_backend_line(line))
 }
@@ -142,6 +144,7 @@ fn parse_backend_line(line: &str) -> Option<String> {
 mod tests {
     use super::*;
     use crate::engine::catalog::{Catalog, OpponentLevel};
+    use crate::engine::platform::GPU_BACKEND;
 
     #[test]
     fn maia_runs_one_node_on_the_cpu() {
@@ -149,7 +152,7 @@ mod tests {
         let level = c.level("maia-1500").unwrap();
         let cfg = Lc0Config::for_level(level, "/n/maia-1500.pb.gz".into(), &Settings::default());
         let cmds = cfg.commands();
-        assert!(cmds.contains(&("Backend".into(), "blas".into())));
+        assert!(cmds.contains(&("Backend".into(), CPU_BACKEND.into())));
         assert!(cmds.contains(&("MinibatchSize".into(), "1".into())));
         assert!(cmds.contains(&("UCI_ShowWDL".into(), "true".into())));
         assert!(cmds.iter().any(|(n, _)| n == "Temperature"));
@@ -162,17 +165,17 @@ mod tests {
     #[test]
     fn deep_searching_levels_use_the_users_backend() {
         let c = Catalog::load();
-        let s = Settings { backend: Some("metal".into()), backend_opts: Some("gpu=1".into()), ..Settings::default() };
+        let s = Settings { backend: Some(GPU_BACKEND.into()), backend_opts: Some("gpu=1".into()), ..Settings::default() };
         // More than 16 nodes per move: worth the GPU.
         let deep = OpponentLevel { nodes: Some(64), ..c.level("leela-8").unwrap().clone() };
         let cfg = Lc0Config::for_level(&deep, "/n/x".into(), &s);
-        assert_eq!(cfg.backend.as_deref(), Some("metal"));
+        assert_eq!(cfg.backend.as_deref(), Some(GPU_BACKEND));
         assert_eq!(cfg.backend_opts.as_deref(), Some("gpu=1"));
         assert_eq!(cfg.smart_pruning_factor, Some(0.0));
         // Shallow levels answer instantly on the CPU.
         for id in ["leela-1", "leela-8"] {
             let cfg = Lc0Config::for_level(c.level(id).unwrap(), "/n/x".into(), &s);
-            assert_eq!(cfg.backend.as_deref(), Some("blas"), "{id}");
+            assert_eq!(cfg.backend.as_deref(), Some(CPU_BACKEND), "{id}");
         }
     }
 

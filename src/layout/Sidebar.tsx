@@ -11,6 +11,7 @@ import {
 } from "@tabler/icons-react";
 import type { ReactNode } from "react";
 import { openAnalysis, openNewGame } from "../lib/actions";
+import { shortcut } from "../lib/platform";
 import { useApp, type Section } from "../stores/app";
 
 interface NavItem {
@@ -46,7 +47,7 @@ export function Sidebar() {
       icon: <IconPlayerPlay size={22} stroke={1.7} />,
       active: onBoards && active?.kind !== "analysis",
       onClick: () => goBoards("play"),
-      hint: "Play Leela or Maia (⌘N)",
+      hint: `Play Leela or Maia (${shortcut("mod", "N")})`,
     },
     {
       label: "Analyse",
@@ -81,7 +82,7 @@ export function Sidebar() {
         icon: <IconSettings size={22} stroke={1.7} />,
         active: section === "settings",
         onClick: screen("settings"),
-        hint: "Settings (⌘,)",
+        hint: `Settings (${shortcut("mod", ",")})`,
       })}
     </nav>
   );

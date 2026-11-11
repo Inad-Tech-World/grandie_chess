@@ -17,6 +17,7 @@ use crate::db::games::{self as dbgames, DbGame, DbStats, GamePage, GameQuery};
 use crate::db::import::{self as dbimport, ImportSummary};
 use crate::engine::benchmark::{self, BackendResult};
 use crate::engine::catalog::{network_path, NetworkEntry, NetworkKind, OpponentLevel};
+use crate::engine::platform::{engine_command, GPU_BACKEND};
 use crate::engine::process::position_command;
 use crate::engine::registry::{EngineConfig, EngineKind, OptionValue, Registry, LC0_ID};
 use crate::error::{Error, Result};
@@ -160,8 +161,8 @@ pub fn network_delete(state: State<'_, AppState>, id: String) -> Result<()> {
     Ok(())
 }
 
-/// Times every Metal GPU and the CPU, saves the fastest backend in settings
-/// and returns all results.
+/// Times every GPU and the CPU, saves the fastest backend in settings and
+/// returns all results.
 #[tauri::command]
 #[specta::specta]
 pub async fn engine_detect_backend(state: State<'_, AppState>) -> Result<Vec<BackendResult>> {
@@ -169,16 +170,16 @@ pub async fn engine_detect_backend(state: State<'_, AppState>) -> Result<Vec<Bac
     let network = state.full_network()?;
     let weights = network_path(&state.paths.networks_dir, &network);
     let mut results = Vec::new();
-    let mut metal_exhausted = false;
+    let mut gpu_exhausted = false;
     for (backend, opts) in benchmark::candidates() {
         // GPU indices are contiguous: once one fails there are no more GPUs.
-        if backend == "metal" && metal_exhausted {
+        if backend == GPU_BACKEND && gpu_exhausted {
             continue;
         }
         let r = benchmark::run_one(&lc0, &weights, &backend, opts.as_deref()).await;
-        if backend == "metal" && r.error.is_some() {
-            metal_exhausted = true;
-            if results.iter().any(|p: &BackendResult| p.backend == "metal") {
+        if backend == GPU_BACKEND && r.error.is_some() {
+            gpu_exhausted = true;
+            if results.iter().any(|p: &BackendResult| p.backend == GPU_BACKEND) {
                 continue;
             }
         }
@@ -342,9 +343,28 @@ pub async fn engine_remove(state: State<'_, AppState>, id: String) -> Result<()>
     state.registry.remove(&id)
 }
 
+#[cfg(not(windows))]
 const STOCKFISH_URL: &str = "https://github.com/official-stockfish/Stockfish/releases/latest/download/stockfish-macos-universal.tar.gz";
+#[cfg(not(windows))]
+const STOCKFISH_ARCHIVE: &str = "stockfish.tar.gz";
+#[cfg(windows)]
+const STOCKFISH_URL: &str =
+    "https://github.com/official-stockfish/Stockfish/releases/latest/download/stockfish-windows-x86-64-universal.zip";
+#[cfg(windows)]
+const STOCKFISH_ARCHIVE: &str = "stockfish.zip";
 
-/// Download the official Stockfish release for macOS and add it as an engine.
+/// The archive tool. Windows 10 and later ship bsdtar, which also reads zip
+/// files; it is named by full path so Git's GNU tar on PATH can't stand in.
+fn tar_program() -> PathBuf {
+    if cfg!(windows) {
+        let root = std::env::var_os("SystemRoot").map(PathBuf::from).unwrap_or_else(|| PathBuf::from(r"C:\Windows"));
+        root.join("System32").join("tar.exe")
+    } else {
+        PathBuf::from("tar")
+    }
+}
+
+/// Download the official Stockfish release for this platform and add it as an engine.
 #[tauri::command]
 #[specta::specta]
 pub async fn engine_install_stockfish(app: AppHandle, state: State<'_, AppState>) -> Result<EngineConfig> {
@@ -353,7 +373,7 @@ pub async fn engine_install_stockfish(app: AppHandle, state: State<'_, AppState>
         return Err(Error::other("Stockfish is already downloading"));
     }
     let dir = state.paths.engines_dir.join("stockfish");
-    let archive = state.paths.engines_dir.join("stockfish.tar.gz");
+    let archive = state.paths.engines_dir.join(STOCKFISH_ARCHIVE);
     let emit = |received: u64, total: Option<u64>, done: bool, error: Option<String>| {
         let _ = DownloadProgress { id: id.clone(), received: received as f64, total: total.map(|t| t as f64), done, error }.emit(&app);
     };
@@ -363,14 +383,17 @@ pub async fn engine_install_stockfish(app: AppHandle, state: State<'_, AppState>
             std::fs::remove_dir_all(&dir)?;
         }
         std::fs::create_dir_all(&dir)?;
-        let status = tokio::process::Command::new("tar").arg("-xzf").arg(&archive).arg("-C").arg(&dir).status().await?;
+        let status = engine_command(tar_program()).arg("-xf").arg(&archive).arg("-C").arg(&dir).status().await?;
         let _ = std::fs::remove_file(&archive);
         if !status.success() {
             return Err(Error::other("could not unpack the Stockfish download"));
         }
         let exe = find_executable(&dir, "stockfish").ok_or_else(|| Error::other("no Stockfish binary in the download"))?;
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o755))?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o755))?;
+        }
         let mut config = Registry::probe(&exe).await?;
         config.id = "stockfish".into();
         let threads = std::thread::available_parallelism().map(|n| n.get().saturating_sub(2).max(1)).unwrap_or(2);
@@ -397,12 +420,25 @@ fn find_executable(dir: &std::path::Path, prefix: &str) -> Option<PathBuf> {
             let path = entry.path();
             if path.is_dir() {
                 stack.push(path);
-            } else if path.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.starts_with(prefix) && !n.contains('.')) {
+            } else if path.file_name().and_then(|n| n.to_str()).is_some_and(|n| is_engine_binary(n, prefix, cfg!(windows))) {
                 return Some(path);
             }
         }
     }
     None
+}
+
+/// Whether a file in an engine download is the program itself: `.exe` on
+/// Windows, no extension elsewhere (which skips READMEs and sources).
+fn is_engine_binary(name: &str, prefix: &str, windows: bool) -> bool {
+    if !name.starts_with(prefix) {
+        return false;
+    }
+    if windows {
+        name.strip_suffix(".exe").is_some_and(|stem| !stem.contains('.'))
+    } else {
+        !name.contains('.')
+    }
 }
 
 // ---- live analysis ----
@@ -700,7 +736,8 @@ pub fn lichess_token_status() -> Result<bool> {
     Ok(crate::secrets::lichess_token()?.is_some())
 }
 
-/// Store (or with an empty string, remove) the Lichess API token in the Keychain.
+/// Store (or with an empty string, remove) the Lichess API token in the system
+/// credential store (the Keychain on macOS, Credential Manager on Windows).
 #[tauri::command]
 #[specta::specta]
 pub fn lichess_token_set(token: String) -> Result<()> {
@@ -867,4 +904,19 @@ pub fn puzzle_finish(state: State<'_, AppState>, puzzle_id: String, solved: bool
 #[specta::specta]
 pub fn progress_summary(state: State<'_, AppState>) -> Result<ProgressSummary> {
     crate::training::progress::summary(&*state.db.get()?, &state.catalog, crate::db::now_secs())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_engine_binary;
+
+    #[test]
+    fn finds_the_stockfish_program_in_a_download() {
+        assert!(is_engine_binary("stockfish-macos-universal", "stockfish", false));
+        assert!(!is_engine_binary("stockfish.md", "stockfish", false));
+        assert!(is_engine_binary("stockfish-windows-x86-64-universal.exe", "stockfish", true));
+        assert!(!is_engine_binary("stockfish-windows-x86-64-universal", "stockfish", true));
+        assert!(!is_engine_binary("stockfish.tar.exe", "stockfish", true));
+        assert!(!is_engine_binary("README.exe", "stockfish", true));
+    }
 }
