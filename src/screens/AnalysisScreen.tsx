@@ -1,195 +1,90 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActionIcon, Alert, Button, Group, Paper, SegmentedControl, Stack, Text, Textarea, Tooltip } from "@mantine/core";
-import { useHotkeys } from "@mantine/hooks";
-import {
-  IconChevronLeft,
-  IconChevronRight,
-  IconChevronsLeft,
-  IconChevronsRight,
-  IconSwitchVertical,
-  IconX,
-} from "@tabler/icons-react";
+import { Alert, Button, Group, SegmentedControl, Text, Textarea } from "@mantine/core";
 import { Board, useBoardSize, type Arrow } from "../board/Board";
+import { BoardNavButtons, useBoardNav } from "../board/BoardNav";
 import { EvalBar } from "../board/EvalBar";
 import { MoveTree } from "../moves/MoveTree";
 import { EnginePanel } from "../analysis/EnginePanel";
 import { EvalGraph } from "../analysis/EvalGraph";
 import { ReviewPanel } from "../analysis/ReviewPanel";
-import { commands, notifyError, unwrap, type MoveReview, type OpeningName, type ReviewDepth } from "../lib/api";
-import { addApplied, deleteFrom, header, mainline, promoteToMainline, survivorAfterDelete, toggleNag, uciPath, updateNode } from "../lib/tree";
+import { MoveContextMenu } from "../analysis/MoveContextMenu";
+import { useLiveEngines } from "../analysis/useLiveEngines";
+import { useReviewFlow } from "../analysis/useReviewFlow";
+import { useRetry } from "../analysis/useRetry";
+import { commands, errorKind, notifyError, type AnalysisLine, type CoachScript, type ErrorPayload, type MoveReview, type OpeningName, type VoiceCommand } from "../lib/api";
+import { applyMove as applyRustMove } from "../lib/applyMove";
+import { addApplied, deleteFrom, header, lastOfLine, promoteToMainline, survivorAfterDelete, toggleNag, uciPath, updateNode } from "../lib/tree";
 import { CLASS_STYLE } from "../lib/score";
+import { usePositionInfo } from "../lib/usePositionInfo";
 import { useAnalysis } from "../stores/analysis";
 import { useSettings } from "../stores/settings";
-import { sameFen, useEngines } from "../stores/engines";
-import { useReviews } from "../stores/reviews";
-import { useApp } from "../stores/app";
-import { primePositionInfo, usePositionInfo } from "../lib/usePositionInfo";
-import { playSound, soundForSan } from "../lib/sounds";
-
-interface RetryState {
-  move: MoveReview;
-  /** Node whose position the user must find a better move in. */
-  nodeId: number;
-  status: "waiting" | "checking" | "correct" | "wrong";
-  tried?: { san: string; winAfter: number };
-}
-
-const NAGS: { nag: number; label: string }[] = [
-  { nag: 1, label: "!" },
-  { nag: 2, label: "?" },
-  { nag: 3, label: "!!" },
-  { nag: 4, label: "??" },
-  { nag: 5, label: "!?" },
-  { nag: 6, label: "?!" },
-];
+import { useCoach } from "../stores/coach";
+import { CoachPanel } from "../coach/CoachPanel";
+import { useCoachBoard } from "../coach/useCoachBoard";
+import { IconSchool } from "@tabler/icons-react";
 
 export function AnalysisScreen({ analysisId, tabId }: { analysisId: string; tabId: string }) {
   const doc = useAnalysis((s) => s.docs[analysisId]);
   const update = useAnalysis((s) => s.update);
   const settings = useSettings((s) => s.settings);
-  const engineTab = useEngines((s) => s.tabs[tabId]) ?? { enabled: ["lc0"], running: false, multipv: 3 };
-  const setEngineTab = useEngines((s) => s.setTab);
-  const allLines = useEngines((s) => s.lines);
-  const progress = useReviews((s) => s.progress[analysisId] ?? null);
-  const isActive = useApp((s) => s.activeTabId === tabId && s.section === "boards");
   const { ref, size } = useBoardSize(doc?.review ? 116 : 16, 34);
   const [panel, setPanel] = useState<"moves" | "review">(doc?.review || doc?.autoReview ? "review" : "moves");
-  const [retry, setRetry] = useState<RetryState | null>(null);
   const [menu, setMenu] = useState<{ id: number; x: number; y: number } | null>(null);
   const [editingComment, setEditingComment] = useState<number | null>(null);
   const [extraArrows, setExtraArrows] = useState<Arrow[]>([]);
   const moveQueue = useRef<Promise<boolean>>(Promise.resolve(true));
   const [opening, setOpening] = useState<OpeningName | null>(null);
 
-  const node = doc?.tree.nodes[retry ? retry.nodeId : doc.current];
-  const info = usePositionInfo(node?.fen);
+  const coachOwner = `analysis:${tabId}`;
+  const coachBoard = useCoachBoard(coachOwner);
+  const retry = useRetry();
+  const showReviewPanel = useCallback(() => setPanel("review"), []);
+  const review = useReviewFlow(analysisId, doc, showReviewPanel);
 
+  const node = doc?.tree.nodes[retry.retry ? retry.retry.nodeId : doc.current];
+  const info = usePositionInfo(node?.fen);
+  const fen = node?.fen ?? "";
+  const moves = useMemo(() => (doc && node ? uciPath(doc.tree, node.id) : []), [doc, node]);
+  const rootFen = doc?.tree.nodes[0].fen;
+  const engines = useLiveEngines(tabId, rootFen, moves, fen);
+
+  // Navigating leaves retry mode, so the board and the tree always agree.
+  const { stop: stopRetry } = retry;
   const go = useCallback(
     (id: number | null | undefined) => {
       if (id === null || id === undefined) return;
+      stopRetry();
       setExtraArrows([]);
       update(analysisId, { current: id });
     },
-    [analysisId, update],
+    [analysisId, update, stopRetry],
   );
-
-  // ---- review ↔ tree mapping ----
-  const main = useMemo(() => (doc ? mainline(doc.tree) : []), [doc]);
-  const reviewNodeOf = useCallback(
-    (ply: number) => {
-      if (!doc?.review) return null;
-      const id = main[ply - 1];
-      return id !== undefined && doc.tree.nodes[id].uci === doc.review.moves[ply - 1]?.uci ? id : null;
-    },
-    [doc, main],
-  );
-  const reviewOfNode = useCallback(
-    (id: number): MoveReview | null => {
-      if (!doc?.review) return null;
-      const idx = main.indexOf(id);
-      if (idx < 0) return null;
-      const m = doc.review.moves[idx];
-      return m && m.uci === doc.tree.nodes[id].uci ? m : null;
-    },
-    [doc, main],
-  );
-  const currentPly = doc && main.includes(doc.current) ? doc.tree.nodes[doc.current].ply : doc?.current === 0 ? 0 : null;
-
-  // ---- live analysis ----
-  const fen = node?.fen ?? "";
-  const moves = useMemo(() => (doc && node ? uciPath(doc.tree, node.id) : []), [doc, node]);
-  const running = engineTab.running && isActive;
-  const enabledKey = engineTab.enabled.join(",");
-  useEffect(() => {
-    if (!doc || !node) return;
-    const engines = enabledKey ? enabledKey.split(",") : [];
-    if (!running) {
-      engines.forEach((e) => void commands.analysisStop(e));
-      return;
-    }
-    const t = setTimeout(() => {
-      for (const engineId of engines) {
-        void commands
-          .analysisStart({ tabId, engineId, rootFen: doc.tree.nodes[0].fen, moves, multipv: engineTab.multipv })
-          .then((r) => {
-            if (r.status === "error") {
-              notifyError("Engine error", r.error);
-              setEngineTab(tabId, { running: false });
-            }
-          });
-      }
-    }, 120);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [running, fen, enabledKey, engineTab.multipv, tabId]);
-
-  useEffect(() => () => engineTab.enabled.forEach((e) => void commands.analysisStop(e)), []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Name of the opening reached by the current line.
-  const rootFen = doc?.tree.nodes[0].fen;
   const movesKey = moves.join(" ");
   useEffect(() => {
     if (!rootFen) return;
-    void commands.openingName(rootFen, movesKey ? movesKey.split(" ") : []).then(setOpening);
+    let live = true;
+    commands
+      .openingName(rootFen, movesKey ? movesKey.split(" ") : [])
+      .then((o) => live && setOpening(o))
+      .catch(() => live && setOpening(null));
+    return () => {
+      live = false;
+    };
   }, [rootFen, movesKey]);
 
-  // ---- auto review after a game ----
-  const startReview = useCallback(
-    async (depth: ReviewDepth) => {
-      const d = useAnalysis.getState().docs[analysisId];
-      if (!d) return;
-      const ids = mainline(d.tree);
-      const ucis = ids.map((i) => d.tree.nodes[i].uci ?? "");
-      if (ucis.length === 0) {
-        notifyError("Nothing to review", "Play or load some moves first.");
-        return;
-      }
-      setPanel("review");
-      useReviews.getState().set(analysisId, 0, ucis.length + 1);
-      try {
-        const review = await unwrap(commands.reviewStart(analysisId, d.tree.nodes[0].fen, ucis, depth, null));
-        update(analysisId, (cur) => {
-          // Mark mistakes in the tree with the matching annotation glyph.
-          let tree = cur.tree;
-          review.moves.forEach((m, i) => {
-            const id = ids[i];
-            const nag = { inaccuracy: 6, mistake: 2, blunder: 4, brilliant: 3, great: 1 }[m.class as string];
-            if (nag && tree.nodes[id] && !tree.nodes[id].nags.some((n) => n <= 6)) tree = toggleNag(tree, id, nag);
-          });
-          return { review, reviewMoves: ucis, tree, autoReview: false };
-        });
-        // Store the review with the game so Progress can use it.
-        const gameId = useAnalysis.getState().docs[analysisId]?.gameId;
-        if (gameId !== undefined) void commands.dbSaveReview(gameId, review);
-      } catch (e) {
-        if (!String(e).includes("cancelled")) notifyError("Review failed", e);
-        update(analysisId, { autoReview: false });
-      } finally {
-        useReviews.getState().clear(analysisId);
-      }
-    },
-    [analysisId, update],
-  );
-
-  const autoStarted = useRef(false);
-  useEffect(() => {
-    if (doc?.autoReview && !doc.review && !autoStarted.current) {
-      autoStarted.current = true;
-      void startReview("quick");
-    }
-  }, [doc?.autoReview, doc?.review, startReview]);
-
-  // ---- keyboard ----
-  useHotkeys([
-    ["ArrowLeft", () => !retry && go(node?.parent)],
-    ["ArrowRight", () => !retry && go(node?.children[0])],
-    ["ArrowUp", () => !retry && go(0)],
-    ["ArrowDown", () => !retry && doc && go(lastOf(doc.tree, doc.current))],
-    ["Home", () => !retry && go(0)],
-    ["End", () => !retry && doc && go(lastOf(doc.tree, doc.current))],
-    ["Space", () => setEngineTab(tabId, { running: !engineTab.running })],
-    ["f", () => doc && update(analysisId, { orientation: doc.orientation === "white" ? "black" : "white" })],
-    ["Escape", () => setRetry(null)],
+  const flip = () => update(analysisId, (d) => ({ orientation: d.orientation === "white" ? "black" : "white" }));
+  const nav = {
+    start: () => go(0),
+    back: () => go(node?.parent),
+    forward: () => go(node?.children[0]),
+    end: () => doc && go(lastOfLine(doc.tree, doc.current)),
+    flip,
+  };
+  useBoardNav(nav, [
+    ["Space", engines.toggleRunning],
+    ["Escape", () => (useCoach.getState().owner === coachOwner && useCoach.getState().fen ? useCoach.getState().stop() : stopRetry())],
   ]);
 
   if (!doc || !node) return <Text p="xl">This analysis is no longer available.</Text>;
@@ -204,62 +99,51 @@ export function AnalysisScreen({ analysisId, tabId }: { analysisId: string; tabI
   }
 
   async function applyMove(uci: string): Promise<boolean> {
-    const doc = useAnalysis.getState().docs[analysisId];
-    const node = doc?.tree.nodes[retry ? retry.nodeId : doc.current];
-    if (!doc || !node) return false;
-    if (retry) {
-      setRetry({ ...retry, status: "checking" });
-      try {
-        const check = await unwrap(commands.reviewCheckMove(node.fen, uci));
-        const ok = (check.winAfter ?? 0) >= (retry.move.winBefore ?? 0) - 5 || uci === retry.move.best;
-        setRetry({ ...retry, status: ok ? "correct" : "wrong", tried: { san: check.san, winAfter: check.winAfter ?? 0 } });
-        playSound(ok ? "correct" : "wrong");
-      } catch (e) {
-        notifyError("Could not check the move", e);
-        setRetry({ ...retry, status: "waiting" });
-      }
+    const attempt = retry.active();
+    const d = useAnalysis.getState().docs[analysisId];
+    const at = d?.tree.nodes[attempt ? attempt.nodeId : d.current];
+    if (!d || !at) return false;
+    if (attempt) {
+      await retry.check(at.fen, uci);
       return false; // keep the retry position on the board
     }
     try {
-      const applied = await unwrap(commands.chessApplyMove(node.fen, uci));
-      primePositionInfo(applied.position);
-      playSound(soundForSan(applied.san));
-      const { tree, id } = addApplied(doc.tree, doc.current, applied);
-      update(analysisId, { tree, current: id });
+      const applied = await applyRustMove(at.fen, uci);
+      let added = false;
+      update(analysisId, (cur) => {
+        // The tree may have been edited while the move was checked; only add
+        // it if the position it was played in is still there.
+        if (cur.tree.nodes[d.current]?.fen !== at.fen) return {};
+        added = true;
+        const { tree, id } = addApplied(cur.tree, d.current, applied);
+        return { tree, current: id };
+      });
       setExtraArrows([]);
-      return true;
+      return added;
     } catch (e) {
       notifyError("Illegal move", e);
       return false;
     }
   }
 
-  async function playLine(pv: string[]) {
-    if (!doc || !node || pv.length === 0) return;
-    let tree = doc.tree;
-    let cur = doc.current;
-    let fenNow = node.fen;
-    for (const uci of pv.slice(0, 1)) {
-      const r = await commands.chessApplyMove(fenNow, uci);
-      if (r.status !== "ok") break;
-      const res = addApplied(tree, cur, r.data);
-      tree = res.tree;
-      cur = res.id;
-      fenNow = r.data.position.fen;
-    }
-    update(analysisId, { tree, current: cur });
+  /** Clicking an engine line plays its first move (through the move queue). */
+  function playLine(pv: string[]) {
+    if (pv.length) void move(pv[0]);
   }
 
   async function showBetter(m: MoveReview) {
-    const parent = reviewNodeOf(m.ply) !== null ? doc!.tree.nodes[reviewNodeOf(m.ply)!].parent : null;
+    const id = review.reviewNodeOf(m.ply);
+    const parent = id !== null ? doc!.tree.nodes[id].parent : null;
     if (parent === null || !m.best) return;
-    setRetry(null);
+    stopRetry();
     update(analysisId, { current: parent });
     setExtraArrows([{ uci: m.best, brush: "green" }]);
     // Add the engine's line as a variation so it can be stepped through.
-    const r = await commands.chessApplySanLine(doc!.tree.nodes[parent].fen, m.bestLine.slice(0, 8));
+    const parentFen = doc!.tree.nodes[parent].fen;
+    const r = await commands.chessApplySanLine(parentFen, m.bestLine.slice(0, 8));
     if (r.status !== "ok" || r.data.length === 0) return;
     update(analysisId, (d) => {
+      if (d.tree.nodes[parent]?.fen !== parentFen) return {}; // the tree changed meanwhile
       let tree = d.tree;
       let cur = parent;
       for (const applied of r.data) {
@@ -272,11 +156,83 @@ export function AnalysisScreen({ analysisId, tabId }: { analysisId: string; tabI
   }
 
   function startRetry(m: MoveReview) {
-    const id = reviewNodeOf(m.ply);
+    const id = review.reviewNodeOf(m.ply);
     if (id === null) return;
-    const parent = doc!.tree.nodes[id].parent ?? 0;
     setExtraArrows([]);
-    setRetry({ move: m, nodeId: parent, status: "waiting" });
+    retry.start(m, doc!.tree.nodes[id].parent ?? 0);
+  }
+
+  // ---- the coach ----
+  async function coachRun(label: string, load: () => Promise<{ status: "ok"; data: CoachScript } | { status: "error"; error: ErrorPayload }>) {
+    const coach = useCoach.getState();
+    stopRetry();
+    coach.setLoading(coachOwner, label);
+    const r = await load();
+    coach.setLoading(coachOwner, null);
+    if (r.status === "ok") coach.play(r.data, coachOwner);
+    else if (errorKind(r.error) !== "cancelled") notifyError("The coach couldn't explain this", r.error);
+  }
+
+  function explainMove(m: MoveReview) {
+    const id = review.reviewNodeOf(m.ply);
+    const parent = id !== null ? doc!.tree.nodes[id].parent : null;
+    if (id === null || parent === null || !doc!.review) return;
+    const before = doc!.tree.nodes[parent];
+    const after = doc!.tree.nodes[id];
+    const replyLine = doc!.review.evals[m.ply]?.line ?? [];
+    void coachRun("Looking at the move…", () =>
+      commands.coachExplainMove({
+        fenBefore: before.fen,
+        lastMoveBefore: before.uci,
+        played: m.uci,
+        known: m.bestLine.length ? { bestLine: m.bestLine, replyLine, winBefore: m.winBefore ?? 50, winAfter: m.winAfter ?? 50, class: m.class } : null,
+        returnFen: doc!.tree.nodes[doc!.current].fen === after.fen ? after.fen : doc!.tree.nodes[doc!.current].fen,
+        returnLastMove: doc!.tree.nodes[doc!.current].uci,
+        coachId: null,
+      }),
+    );
+  }
+
+  function walkGame() {
+    if (!doc?.review) return;
+    const ucis = review.main.map((i) => doc.tree.nodes[i].uci ?? "");
+    void coachRun("Preparing the key moments…", () => commands.coachWalkGame(doc.review!, ucis, null, null));
+  }
+
+  function explainLine(line: AnalysisLine) {
+    void coachRun("Following the engine's line…", () => commands.coachExplainLine(node!.fen, node!.uci, line.san.slice(0, 8), line.whiteWin, null));
+  }
+
+  /** Explain the move that led here (no review needed: the coach's engine checks it). */
+  function explainCurrent() {
+    const parent = node?.parent;
+    if (!node?.uci || parent === null || parent === undefined) return;
+    const currentReviewMove = review.reviewOfNode(node.id);
+    if (currentReviewMove) return explainMove(currentReviewMove);
+    const before = doc!.tree.nodes[parent];
+    void coachRun("Checking the move with the engine…", () =>
+      commands.coachExplainMove({ fenBefore: before.fen, lastMoveBefore: before.uci, played: node.uci!, known: null, returnFen: node.fen, returnLastMove: node.uci, coachId: null }),
+    );
+  }
+
+  function voiceCommand(c: VoiceCommand): boolean {
+    switch (c) {
+      case "next":
+        nav.forward();
+        return true;
+      case "previous":
+      case "takeBack":
+        nav.back();
+        return true;
+      case "flip":
+        flip();
+        return true;
+      case "explain":
+        explainCurrent();
+        return true;
+      default:
+        return false;
+    }
   }
 
   // ---- variation editing ----
@@ -299,20 +255,19 @@ export function AnalysisScreen({ analysisId, tabId }: { analysisId: string; tabI
   }
 
   // ---- display ----
-  const engineIds = engineTab.enabled;
-  const live = engineIds
-    .map((e) => allLines[`${tabId}:${e}`])
-    .find((u) => u && sameFen(u.fen, node.fen) && u.lines.length > 0);
-  const reviewEval = doc.review && currentPly !== null && !retry ? doc.review.evals[currentPly] : undefined;
+  const r = retry.retry;
+  const live = engines.live;
+  const reviewEval = r ? undefined : review.reviewEval;
   const barWin = live?.lines[0]?.whiteWin ?? reviewEval?.whiteWin ?? null;
   const barScore = live?.lines[0]?.score ?? reviewEval?.score ?? null;
   const engineArrows: Arrow[] =
-    running && live
+    engines.engineTab.running && live
       ? live.lines.slice(0, 3).map((l, i) => ({ uci: l.pv[0] ?? "", brush: i === 0 ? "paleBlue" : "paleGrey" }))
       : [];
-  const currentReview = retry ? null : reviewOfNode(doc.current);
+  const currentReview = r ? null : review.reviewOfNode(doc.current);
   const white = header(doc.tree, "White");
   const black = header(doc.tree, "Black");
+  const progress = review.progress;
 
   return (
     <div className="workspace">
@@ -320,14 +275,16 @@ export function AnalysisScreen({ analysisId, tabId }: { analysisId: string; tabI
         <div className="board-frame">
           {settings.showEvalBar && <EvalBar whiteWin={barWin} score={barScore} orientation={doc.orientation} height={size} />}
           <Board
-            fen={node.fen}
+            fen={coachBoard.fen ?? node.fen}
             orientation={doc.orientation}
             turn={info?.turn ?? "white"}
-            dests={retry && retry.status !== "waiting" && retry.status !== "wrong" ? {} : info?.dests}
-            movableColor={info?.turn}
-            lastMove={retry ? null : node.uci}
-            check={info?.check}
-            arrows={[...extraArrows, ...engineArrows]}
+            dests={coachBoard.active || (r && r.status !== "waiting" && r.status !== "wrong") ? {} : info?.dests}
+            movableColor={coachBoard.active ? undefined : info?.turn}
+            lastMove={coachBoard.active ? coachBoard.lastMove : r ? null : node.uci}
+            check={coachBoard.active ? false : info?.check}
+            arrows={coachBoard.active ? coachBoard.arrows : [...extraArrows, ...engineArrows]}
+            circles={coachBoard.circles}
+            coaching={coachBoard.active}
             coordinates={settings.showCoordinates}
             animationMs={settings.animationMs}
             size={size}
@@ -336,38 +293,38 @@ export function AnalysisScreen({ analysisId, tabId }: { analysisId: string; tabI
         </div>
         {doc.review && (
           <div style={{ width: size + 30, marginTop: 10 }}>
-            <EvalGraph review={doc.review} currentPly={currentPly} onSelectPly={(ply) => go(ply === 0 ? 0 : reviewNodeOf(ply))} />
+            <EvalGraph review={doc.review} currentPly={review.currentPly} onSelectPly={(ply) => go(ply === 0 ? 0 : review.reviewNodeOf(ply))} />
           </div>
         )}
       </div>
 
       <div className="side-panel">
-        {retry && (
+        {r && (
           <Alert
-            color={retry.status === "correct" ? "green" : retry.status === "wrong" ? "orange" : "blue"}
+            color={r.status === "correct" ? "green" : r.status === "wrong" ? "orange" : "blue"}
             variant="light"
-            title={retry.status === "correct" ? "Well found!" : "Find a better move"}
+            title={r.status === "correct" ? "Well found!" : "Find a better move"}
             withCloseButton
-            onClose={() => setRetry(null)}
+            onClose={stopRetry}
             closeButtonLabel="Leave retry"
           >
-            {retry.status === "waiting" && <Text size="sm">You played {retry.move.san} here. What's stronger?</Text>}
-            {retry.status === "checking" && <Text size="sm">Checking your move…</Text>}
-            {retry.status === "correct" && retry.tried && (
+            {r.status === "waiting" && <Text size="sm">You played {r.move.san} here. What's stronger?</Text>}
+            {r.status === "checking" && <Text size="sm">Checking your move…</Text>}
+            {r.status === "correct" && r.tried && (
               <Text size="sm">
-                {retry.tried.san} keeps your winning chances at {Math.round(retry.tried.winAfter)}%.
+                {r.tried.san} keeps your winning chances at {Math.round(r.tried.winAfter)}%.
               </Text>
             )}
-            {retry.status === "wrong" && retry.tried && (
+            {r.status === "wrong" && r.tried && (
               <>
                 <Text size="sm">
-                  {retry.tried.san} still drops to {Math.round(retry.tried.winAfter)}%. Try again.
+                  {r.tried.san} still drops to {Math.round(r.tried.winAfter)}%. Try again.
                 </Text>
                 <Group gap={6} mt={6}>
-                  <Button size="xs" variant="default" onClick={() => setRetry({ ...retry, status: "waiting", tried: undefined })}>
+                  <Button size="xs" variant="default" onClick={retry.again}>
                     Try again
                   </Button>
-                  <Button size="xs" variant="subtle" onClick={() => void showBetter(retry.move)}>
+                  <Button size="xs" variant="subtle" onClick={() => void showBetter(r.move)}>
                     Show the answer
                   </Button>
                 </Group>
@@ -376,7 +333,27 @@ export function AnalysisScreen({ analysisId, tabId }: { analysisId: string; tabI
           </Alert>
         )}
 
-        <EnginePanel tabId={tabId} fen={node.fen} onPlayLine={(pv) => void playLine(pv)} />
+        <CoachPanel
+          owner={coachOwner}
+          fen={() => (useCoach.getState().fen ? null : node.fen)}
+          context={() => ({
+            fen: node.fen,
+            recentMoves: review.main.slice(0, Math.max(0, (review.currentPly ?? 0))).slice(-10).map((i) => doc.tree.nodes[i].san ?? ""),
+            game: white || black ? `${white ?? "?"} vs ${black ?? "?"}` : null,
+            player: null,
+          })}
+          onVoiceMove={(uci) => void move(uci)}
+          onVoiceCommand={voiceCommand}
+          actions={
+            node.uci ? (
+              <Button size="compact-xs" variant="light" color="teal" leftSection={<IconSchool size={12} />} onClick={explainCurrent}>
+                Explain {node.san ?? "this move"}
+              </Button>
+            ) : undefined
+          }
+        />
+
+        <EnginePanel tabId={tabId} fen={node.fen} onPlayLine={playLine} onExplainLine={explainLine} />
 
         <SegmentedControl
           size="xs"
@@ -396,11 +373,13 @@ export function AnalysisScreen({ analysisId, tabId }: { analysisId: string; tabI
               whiteName={white ?? "White"}
               blackName={black ?? "Black"}
               currentMove={currentReview}
-              onStart={(depth) => void startReview(depth)}
-              onCancel={() => void commands.reviewCancel(analysisId)}
-              onJump={(ply) => go(reviewNodeOf(ply))}
+              onStart={(depth) => void review.startReview(depth)}
+              onCancel={review.cancelReview}
+              onJump={(ply) => go(review.reviewNodeOf(ply))}
               onShowBetter={(m) => void showBetter(m)}
               onRetry={startRetry}
+              onExplain={explainMove}
+              onWalkGame={walkGame}
             />
           </div>
         ) : (
@@ -430,12 +409,12 @@ export function AnalysisScreen({ analysisId, tabId }: { analysisId: string; tabI
                   setMenu({ id, x: e.clientX, y: e.clientY });
                 }}
                 decorate={(id) => {
-                  const r = reviewOfNode(id);
-                  if (!r || r.class === "best" || r.class === "good") return null;
+                  const rv = review.reviewOfNode(id);
+                  if (!rv || rv.class === "best" || rv.class === "good") return null;
                   if (doc.tree.nodes[id].nags.length) return null;
                   return (
-                    <span className="annot" style={{ color: CLASS_STYLE[r.class].color }}>
-                      {CLASS_STYLE[r.class].symbol}
+                    <span className="annot" style={{ color: CLASS_STYLE[rv.class].color }}>
+                      {CLASS_STYLE[rv.class].symbol}
                     </span>
                   );
                 }}
@@ -444,6 +423,8 @@ export function AnalysisScreen({ analysisId, tabId }: { analysisId: string; tabI
             {editingComment !== null && (
               <div style={{ padding: 8, borderTop: "1px solid var(--hairline)" }}>
                 <Textarea
+                  // Keyed by node so switching moves never shows the previous comment.
+                  key={editingComment}
                   autosize
                   minRows={2}
                   placeholder="Comment on this move"
@@ -451,76 +432,32 @@ export function AnalysisScreen({ analysisId, tabId }: { analysisId: string; tabI
                   autoFocus
                   onBlur={(e) => {
                     const text = e.currentTarget.value.trim();
-                    update(analysisId, (d) => ({ tree: updateNode(d.tree, editingComment, { comment: text || null }) }));
+                    const id = editingComment;
+                    update(analysisId, (d) => (d.tree.nodes[id] ? { tree: updateNode(d.tree, id, { comment: text || null }) } : {}));
                     setEditingComment(null);
                   }}
                 />
               </div>
             )}
             <Group justify="center" gap={4} p={6} style={{ borderTop: "1px solid var(--hairline)" }}>
-              <ActionIcon variant="subtle" color="gray" onClick={() => go(0)} aria-label="Start">
-                <IconChevronsLeft size={18} />
-              </ActionIcon>
-              <ActionIcon variant="subtle" color="gray" onClick={() => go(node.parent)} aria-label="Previous move">
-                <IconChevronLeft size={18} />
-              </ActionIcon>
-              <ActionIcon variant="subtle" color="gray" onClick={() => go(node.children[0])} aria-label="Next move">
-                <IconChevronRight size={18} />
-              </ActionIcon>
-              <ActionIcon variant="subtle" color="gray" onClick={() => go(lastOf(doc.tree, doc.current))} aria-label="End of line">
-                <IconChevronsRight size={18} />
-              </ActionIcon>
-              <Tooltip label="Flip board (F)">
-                <ActionIcon
-                  variant="subtle"
-                  color="gray"
-                  onClick={() => update(analysisId, { orientation: doc.orientation === "white" ? "black" : "white" })}
-                  aria-label="Flip board"
-                >
-                  <IconSwitchVertical size={18} />
-                </ActionIcon>
-              </Tooltip>
+              <BoardNavButtons nav={nav} labels={{ start: "Start", back: "Previous move", forward: "Next move", end: "End of line" }} />
             </Group>
           </div>
         )}
       </div>
 
-      {menu && (
-        <>
-          <div style={{ position: "fixed", inset: 0, zIndex: 99 }} onClick={() => setMenu(null)} onContextMenu={(e) => { e.preventDefault(); setMenu(null); }} />
-          <Paper shadow="md" withBorder p={6} style={{ position: "fixed", left: menu.x, top: menu.y, zIndex: 100, minWidth: 190 }} role="menu">
-            <Stack gap={2}>
-              <Group gap={2} mb={4}>
-                {NAGS.map((n) => (
-                  <Button
-                    key={n.nag}
-                    size="compact-xs"
-                    variant={doc.tree.nodes[menu.id].nags.includes(n.nag) ? "filled" : "default"}
-                    onClick={() => update(analysisId, (d) => ({ tree: toggleNag(d.tree, menu.id, n.nag) }))}
-                    aria-label={`Annotate ${n.label}`}
-                  >
-                    {n.label}
-                  </Button>
-                ))}
-              </Group>
-              <Button size="xs" variant="subtle" justify="flex-start" onClick={() => { setEditingComment(menu.id); setMenu(null); }}>
-                Comment…
-              </Button>
-              <Button size="xs" variant="subtle" justify="flex-start" onClick={() => { promote(menu.id); setMenu(null); }}>
-                Promote to main line
-              </Button>
-              <Button size="xs" variant="subtle" color="red" justify="flex-start" leftSection={<IconX size={14} />} onClick={() => { remove(menu.id); setMenu(null); }}>
-                Delete from here
-              </Button>
-            </Stack>
-          </Paper>
-        </>
+      {menu && doc.tree.nodes[menu.id] && (
+        <MoveContextMenu
+          x={menu.x}
+          y={menu.y}
+          nags={doc.tree.nodes[menu.id].nags}
+          onToggleNag={(nag) => update(analysisId, (d) => ({ tree: toggleNag(d.tree, menu.id, nag) }))}
+          onComment={() => setEditingComment(menu.id)}
+          onPromote={() => promote(menu.id)}
+          onDelete={() => remove(menu.id)}
+          onClose={() => setMenu(null)}
+        />
       )}
     </div>
   );
-}
-
-function lastOf(tree: Parameters<typeof mainline>[0], from: number): number {
-  const line = mainline(tree, from);
-  return line.length ? line[line.length - 1] : from;
 }

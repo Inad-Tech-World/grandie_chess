@@ -10,7 +10,7 @@ Grandie Chess is free software, released under the **GNU General Public License 
 | Leela networks (e.g. 791556, 703810, T1, BT4) | The LCZero project and contributors | Not stated; downloaded at runtime from `storage.lczero.org`, not redistributed | Downloaded by the user from the Engines screen |
 | [Maia Chess](https://github.com/CSSLab/maia-chess) networks 1100–1900 | CSSLab, University of Toronto | GPL-3.0 | Downloaded at runtime from the official GitHub release |
 | Maia 2200 (community) | [CallOn84](https://github.com/CallOn84/LeelaNets) | GPL-3.0 | Optional runtime download |
-| [Stockfish](https://stockfishchess.org) | The Stockfish developers | GPL-3.0 | Optional runtime download of the official release |
+| [Stockfish](https://stockfishchess.org) | The Stockfish developers | GPL-3.0 | Runtime download of the official Stockfish 19 release (pinned, SHA-256 checked); the default coach and review engine |
 
 ## Windows runtime components
 
@@ -37,6 +37,14 @@ Bundled with lc0 in the Windows build only. Their licence texts are installed in
 | Opening names (`src-tauri/resources/openings`) | [lichess-org/chess-openings](https://github.com/lichess-org/chess-openings) | CC0-1.0 |
 | Puzzles | [Lichess puzzle database](https://database.lichess.org/#puzzles) | CC0-1.0 (downloaded at runtime) |
 | Opening explorer | [Lichess opening explorer API](https://lichess.org/api#tag/Opening-Explorer) | Online service, used with the user's own API token |
+| Master games by player | [PGN Mentor](https://www.pgnmentor.com/files.html) | Free downloads, no licence stated; downloaded at runtime when the user picks a player, not redistributed. The player list (`resources/masters/players.json`) is built by `scripts/masters-catalog.py` |
+| Legends pack (`resources/masters/legends.pgn`) | 20 famous historical games, game scores taken from PGN Mentor player files by `scripts/build-legends.py` | Game scores are historical records; the titles and notes are ours |
+
+## AI services (optional)
+
+| Service | How it's used |
+|---|---|
+| [OpenRouter](https://openrouter.ai) | With the user's own API key (kept in the system credential store): the coach's narration and answers (default models: Anthropic Claude Haiku 5.5 and Sonnet 5.5), speech-to-text for voice input, and the optional cloud voice. Nothing is sent unless a key is saved and AI is switched on. |
 
 ## Piece sets
 
@@ -66,6 +74,8 @@ Board colour themes are generated CSS; the "brown" board comes from chessground 
 | [Tabler Icons](https://tabler.io/icons) | MIT |
 | [TanStack Virtual](https://tanstack.com/virtual) | MIT |
 | [rs-fsrs](https://github.com/open-spaced-repetition/rs-fsrs) (spaced repetition) | MIT |
+| [cpal](https://github.com/RustAudio/cpal) (microphone), [hound](https://github.com/ruuda/hound) (WAV) | Apache-2.0 / Apache-2.0 |
+| [zip](https://github.com/zip-rs/zip2), [base64](https://github.com/marshallpierce/rust-base64) | MIT |
 | [rusqlite](https://github.com/rusqlite/rusqlite) / SQLite | MIT / public domain |
 | [tokio](https://tokio.rs), [reqwest](https://github.com/seanmonstar/reqwest), serde, rayon, zstd, csv, chrono | MIT / Apache-2.0 |
 

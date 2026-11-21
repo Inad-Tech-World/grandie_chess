@@ -40,8 +40,14 @@ fn std_dev(xs: &[f64]) -> f64 {
 /// volatility-weighted mean and the harmonic mean of the move accuracies.
 ///
 /// `white_wins` is White's win% for every position (start included);
-/// `accuracies[i]` belongs to the move from position i to i+1.
+/// `accuracies[i]` belongs to the move from position i to i+1. Moves
+/// alternate, starting with White unless `black_first` (a game set up with
+/// Black to move).
 pub fn game_accuracy(white_wins: &[f64], accuracies: &[f64], white: bool) -> Option<f64> {
+    game_accuracy_from(white_wins, accuracies, white, false)
+}
+
+pub fn game_accuracy_from(white_wins: &[f64], accuracies: &[f64], white: bool, black_first: bool) -> Option<f64> {
     if accuracies.is_empty() || white_wins.len() != accuracies.len() + 1 {
         return None;
     }
@@ -55,7 +61,7 @@ pub fn game_accuracy(white_wins: &[f64], accuracies: &[f64], white: bool) -> Opt
     }
     let (mut wsum, mut wtot, mut harm, mut count) = (0.0, 0.0, 0.0, 0.0);
     for (i, acc) in accuracies.iter().enumerate() {
-        let is_white_move = i % 2 == 0;
+        let is_white_move = (i % 2 == 0) != black_first;
         if is_white_move != white {
             continue;
         }
@@ -107,5 +113,10 @@ mod tests {
         let black = game_accuracy(&wins, &mixed, false).unwrap();
         assert!(white > 95.0 && black < 45.0, "{white} {black}");
         assert_eq!(game_accuracy(&wins, &[100.0], true), None);
+        // Black to move first: index 0 is Black's move, so swapping the
+        // start side swaps the two accuracies.
+        let b_first_white = game_accuracy_from(&wins, &mixed, true, true).unwrap();
+        let b_first_black = game_accuracy_from(&wins, &mixed, false, true).unwrap();
+        assert!((b_first_white - black).abs() < 1e-9 && (b_first_black - white).abs() < 1e-9);
     }
 }

@@ -116,12 +116,7 @@ pub async fn start(path: &Path, config: &Lc0Config) -> Result<Arc<Engine>> {
     if !config.weights.exists() {
         return Err(Error::NotFound(format!("network file missing: {}", config.weights.display())));
     }
-    let engine = Engine::spawn(path, &[]).await?;
-    for (name, value) in config.commands() {
-        engine.set_option(&name, value).await?;
-    }
-    engine.ready(READY_TIMEOUT).await?;
-    Ok(engine)
+    super::launch(path, &config.commands()).await
 }
 
 /// Backend lc0 reports on stderr, e.g. "metal (AMD Radeon Pro 560X)". Not

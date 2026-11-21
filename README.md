@@ -11,6 +11,11 @@ A chess training app for macOS and Windows, powered by [Leela Chess Zero](https:
 - **Train openings** with an explorer (your games, Lichess, Masters) and a repertoire drilled with spaced repetition (FSRS).
 - **Solve puzzles** from the Lichess puzzle database with a Glicko-2 puzzle rating.
 - **Track progress**: strength against each level, accuracy over time, weakest openings.
+- **A coach that shows you, and talks.** It plays the reply that punishes a mistake on the board, takes the moves back, plays the better line and explains as it goes: in reviews ("Explain on the board", "Coach me through the key moments"), in coached games (it steps in after your mistakes and lets you take the move back), on engine lines ("Why?"), in puzzles and in opening drills. The moves always come from the engine; the coach speaks with your computer's voices, or a neural voice through OpenRouter.
+- **Two coaches**: Stockfish (concrete, calculating) and Leela, the open-source recreation of AlphaZero (intuitive, positional). AlphaZero itself was never released.
+- **Talk to it.** Hold the mic button (or V) to say a move ("knight takes e5"), a command ("take back", "hint") or a question ("why is that bad?").
+- **Learn from the masters.** Pick a player (about 250, from PGN Mentor), see how they play (openings, results, an engine-measured style and a written report), replay their games with the coach stopping at the key ideas, or play "Guess the move". A bundled Legends pack holds 20 famous games. PGNs exported from ChessBase can be imported too.
+- **Learn from your mistakes**: positions where you went wrong in reviewed games come back with spaced repetition until you find the better move.
 
 Built with [Tauri 2](https://tauri.app) (Rust) and React. lc0 runs as a bundled helper process on the GPU: through Metal on a Mac, and through DirectML on Windows (any DirectX 12 graphics card), with a CPU fallback.
 
@@ -29,6 +34,10 @@ Requires macOS 13 or later, on Apple Silicon or Intel.
 **[Download Grandie Chess for Windows](https://github.com/Inad-Tech-World/grandie_chess/releases/latest/download/Grandie-Chess-Setup.exe)** (64-bit installer; no administrator rights needed). Until builds are code-signed, Windows SmartScreen may warn about an unknown publisher: choose **More info → Run anyway**.
 
 Requires Windows 10 (version 1809 or later) or Windows 11, 64-bit. A DirectX 12 graphics card makes full-strength analysis much faster; without one, Leela runs on the processor.
+
+## The AI coach (optional)
+
+Everything works without AI: the coach then explains with built-in sentences. To let it explain in its own words, answer questions and understand speech, add an [OpenRouter](https://openrouter.ai/keys) API key in **Settings → AI coach**. The key is stored in the macOS Keychain or Windows Credential Manager and only Rust talks to OpenRouter (the web view can't reach the network). Default models are `anthropic/claude-haiku-5.5` for narration and `anthropic/claude-sonnet-5.5` for answers; any OpenRouter model can be picked. Explanations are cached, so showing one again costs nothing, and Settings shows what you've spent.
 
 ## Build from source
 
@@ -85,6 +94,12 @@ See [`engine/BENCHMARKS.md`](engine/BENCHMARKS.md) for engine speed on an Intel 
 | `src-tauri/src/db/` | SQLite game database, import, position search, explorer |
 | `src-tauri/src/training/` | Repertoire, spaced repetition, puzzles, Glicko-2, progress |
 | `src-tauri/src/net/` | Downloads, Lichess and Chess.com APIs |
+| `src-tauri/src/ai/` | OpenRouter client (chat, streaming, tools, speech), the tool-calling agent loop, usage and cache |
+| `src-tauri/src/coach/` | The coach: engines, chess facts, scripts shown on the board, narration, "Ask the coach" |
+| `src-tauri/src/voice/` | Microphone recording and spoken-move understanding |
+| `src-tauri/src/masters/` | The masters library: catalogue, downloads, player profiles, guided replay, Guess the move |
+| `src-tauri/src/commands/` | The commands the UI calls, grouped by area |
+| `src/coach/`, `src/voice/`, `src/masters/` | Coach panel and runner, hold-to-talk, Masters screen |
 | `src/` | React UI |
 | `tests/e2e/` | Playwright tests |
 

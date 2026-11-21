@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Badge, Button, Card, Group, NumberInput, Progress, Radio, Select, SimpleGrid, Stack, Table, Text, Title, Tooltip } from "@mantine/core";
+import { Badge, Button, Card, Group, NumberInput, Progress, Radio, Select, SimpleGrid, Stack, Table, Text, Title, Tooltip, type NumberInputProps } from "@mantine/core";
 import { IconCpu, IconDownload, IconFolderOpen, IconGauge, IconTrash } from "@tabler/icons-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { commands, notifyError, tryCommand, type AppInfo, type BackendResult, type EngineConfig, type NetworkEntry } from "../lib/api";
@@ -8,6 +8,21 @@ import { formatBytes } from "../lib/format";
 import { downloadFraction, useDownloads } from "../stores/downloads";
 import { useSettings } from "../stores/settings";
 import { isMac } from "../lib/platform";
+import { useDebouncedField } from "../lib/useDebouncedField";
+import { CoachSelect } from "../settings/CoachSelect";
+
+/** The coach an engine powers, if any. */
+function coachOf(e: EngineConfig): string | null {
+  if (e.id === "stockfish") return "Stockfish";
+  if (e.kind === "lc0") return "Leela (AlphaZero-style)";
+  return null;
+}
+
+/** A number field that saves after typing pauses (each save restarts engines). */
+function SavedNumberInput({ value, onSave, ...props }: Omit<NumberInputProps, "value" | "onChange"> & { value: number | ""; onSave: (v: number | string) => void }) {
+  const [local, setLocal] = useDebouncedField<number | string>(value, onSave);
+  return <NumberInput {...props} value={local} onChange={setLocal} />;
+}
 
 type BackendChoice = { value: string; label: string; backend: string | null; opts: string | null };
 
@@ -47,7 +62,10 @@ export function EnginesScreen() {
   useEffect(() => {
     void refresh();
     void refreshEngines();
-    void commands.appInfo().then(setInfo);
+    commands
+      .appInfo()
+      .then(setInfo)
+      .catch((e) => notifyError("Could not read the app details", e));
   }, [refresh, refreshEngines]);
 
   async function installStockfish() {
@@ -197,16 +215,16 @@ export function EnginesScreen() {
             data={BACKENDS.map((b) => ({ value: b.value, label: b.label }))}
             allowDeselect={false}
           />
-          <NumberInput
+          <SavedNumberInput
             size="xs"
             label="Search threads"
             description="Empty = automatic"
             min={1}
             max={32}
             value={settings.threads ?? ""}
-            onChange={(v) => void update({ threads: v === "" ? null : Number(v) })}
+            onSave={(v) => void update({ threads: v === "" ? null : Number(v) })}
           />
-          <NumberInput
+          <SavedNumberInput
             size="xs"
             label="Cache (positions)"
             description="NNCacheSize"
@@ -215,16 +233,16 @@ export function EnginesScreen() {
             step={100000}
             thousandSeparator=","
             value={Number(lc0Option("NNCacheSize") ?? 2000000)}
-            onChange={(v) => void setLc0Option("NNCacheSize", String(v || 2000000))}
+            onSave={(v) => void setLc0Option("NNCacheSize", String(v || 2000000))}
           />
-          <NumberInput
+          <SavedNumberInput
             size="xs"
             label="Batch size"
             description="MinibatchSize, 0 = automatic"
             min={0}
             max={1024}
             value={Number(lc0Option("MinibatchSize") ?? 0)}
-            onChange={(v) => void setLc0Option("MinibatchSize", String(v || 0))}
+            onSave={(v) => void setLc0Option("MinibatchSize", String(v || 0))}
           />
         </SimpleGrid>
         {benchRunning && (
@@ -260,15 +278,30 @@ export function EnginesScreen() {
         )}
       </Card>
 
+      <Card withBorder radius="lg" padding="lg" mb="lg">
+        <Text fw={600} mb={4}>
+          Coaches
+        </Text>
+        <Text size="sm" c="dimmed" mb="sm">
+          The coach explains moves with one of two engines. Stockfish calculates concretely and runs fast on any computer. Leela Chess Zero
+          is the open-source recreation of DeepMind's AlphaZero (AlphaZero itself was never released) and judges positions more by intuition.
+        </Text>
+        <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
+          <CoachSelect label="Default coach" />
+        </SimpleGrid>
+      </Card>
+
       <Stack gap="lg">
         <div>
           <Group justify="space-between" mb={6}>
             <Text fw={600}>Analysis engines</Text>
             <Group gap={6}>
               {!engines.some((e) => e.id === "stockfish") && (
-                <Button size="compact-sm" variant="light" leftSection={<IconDownload size={14} />} loading={installing} onClick={() => void installStockfish()}>
-                  Install Stockfish
-                </Button>
+                <Tooltip label="The official Stockfish 19 release, checked against its published checksum.">
+                  <Button size="compact-sm" variant="light" leftSection={<IconDownload size={14} />} loading={installing} onClick={() => void installStockfish()}>
+                    Install Stockfish 19
+                  </Button>
+                </Tooltip>
               )}
               <Button size="compact-sm" variant="default" leftSection={<IconFolderOpen size={14} />} onClick={() => void addEngine()}>
                 Add engine…
@@ -285,21 +318,28 @@ export function EnginesScreen() {
                   return (
                     <Table.Tr key={e.id}>
                       <Table.Td>
-                        <Text size="sm" fw={500}>
-                          {e.name}
-                        </Text>
+                        <Group gap={6}>
+                          <Text size="sm" fw={500}>
+                            {e.name}
+                          </Text>
+                          {coachOf(e) && (
+                            <Badge size="sm" variant="light" color="grape">
+                              Coach: {coachOf(e)}
+                            </Badge>
+                          )}
+                        </Group>
                         <Text size="xs" c="dimmed" truncate maw={420}>
                           {e.kind === "lc0" ? `Bundled · network ${settings.defaultNetwork ?? "not chosen"}` : e.path}
                         </Text>
                       </Table.Td>
                       <Table.Td w={120}>
                         {hasThreads && (
-                          <NumberInput size="xs" label="Threads" min={1} max={64} value={Number(e.options.find((o) => o.name === "Threads")?.value ?? 1)} onChange={(v) => void setOption(e, "Threads", String(v || 1))} />
+                          <SavedNumberInput size="xs" label="Threads" min={1} max={64} value={Number(e.options.find((o) => o.name === "Threads")?.value ?? 1)} onSave={(v) => void setOption(e, "Threads", String(v || 1))} />
                         )}
                       </Table.Td>
                       <Table.Td w={120}>
                         {hasHash && (
-                          <NumberInput size="xs" label="Hash (MB)" min={16} max={8192} step={64} value={Number(e.options.find((o) => o.name === "Hash")?.value ?? 16)} onChange={(v) => void setOption(e, "Hash", String(v || 16))} />
+                          <SavedNumberInput size="xs" label="Hash (MB)" min={16} max={8192} step={64} value={Number(e.options.find((o) => o.name === "Hash")?.value ?? 16)} onSave={(v) => void setOption(e, "Hash", String(v || 16))} />
                         )}
                       </Table.Td>
                       <Table.Td w={60}>

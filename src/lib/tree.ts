@@ -62,6 +62,12 @@ export function mainline(tree: GameTree, from = 0): number[] {
   return out;
 }
 
+/** Last node of the main continuation from `from` (`from` itself at the end). */
+export function lastOfLine(tree: GameTree, from = 0): number {
+  const line = mainline(tree, from);
+  return line.length ? line[line.length - 1] : from;
+}
+
 /** Node ids from the root (exclusive) to `id` (inclusive). */
 export function pathTo(tree: GameTree, id: number): number[] {
   const out: number[] = [];

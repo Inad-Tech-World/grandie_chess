@@ -8,10 +8,10 @@ use serde::{Deserialize, Serialize};
 use shakmaty::{Chess, Color, Position};
 use specta::Type;
 
-use super::accuracy::{game_accuracy, move_accuracy};
+use super::accuracy::{game_accuracy_from, move_accuracy};
 use super::classify::{classify, MoveClass, MoveFacts};
 use super::live::{position_after, to_white_line};
-use crate::engine::process::{position_command, Engine};
+use crate::engine::process::{position_command, Engine, SearchControl};
 use crate::engine::uci::Score;
 use crate::error::{Error, Result};
 use crate::game::position::{fen_of, material_balance, parse_fen, parse_uci, san_of, Side};
@@ -100,6 +100,10 @@ pub struct ReviewResult {
     pub key_moments: Vec<u32>,
 }
 
+/// A review search that takes longer than this is stopped and its best line
+/// so far used; it only triggers when an engine misbehaves.
+const POSITION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
+
 /// Evaluate one position (terminal positions are scored by the rules).
 async fn evaluate(engine: &Engine, start_fen: &str, moves: &[String], pos: &Chess, ply: u32, go: &str) -> Result<PositionEval> {
     let fen = fen_of(pos);
@@ -128,7 +132,8 @@ async fn evaluate(engine: &Engine, start_fen: &str, moves: &[String], pos: &Ches
             second_white_win: None,
         });
     }
-    let result = engine.search(&position_command(start_fen, moves), go, |_| {}).await?;
+    let ctl = SearchControl { timeout: Some(POSITION_TIMEOUT), ..Default::default() };
+    let result = engine.search_ctl(&position_command(start_fen, moves), go, &ctl, |_| {}).await?;
     let top = result.lines.first().ok_or_else(|| Error::Engine("engine returned no evaluation".into()))?;
     let line = to_white_line(top, pos);
     let second = result.lines.get(1).filter(|l| !l.pv.is_empty()).map(|l| to_white_line(l, pos));
@@ -198,19 +203,12 @@ pub fn summarise(start_fen: &str, moves: &[String], evals: Vec<PositionEval>, en
 
     let white_wins: Vec<f64> = evals.iter().map(|e| e.white_win).collect();
     let accuracies: Vec<f64> = reviews.iter().map(|r| r.accuracy).collect();
-    // Accuracy maths assumes White moves first; pad when Black starts.
+    // From a set-up position Black may move first; no padding is needed, the
+    // accuracy maths is told which side starts.
     let black_first = parse_fen(start_fen)?.turn() == Color::Black;
-    let (wins, accs) = if black_first {
-        let mut w = vec![white_wins[0]];
-        w.extend(&white_wins);
-        let mut a = vec![100.0];
-        a.extend(&accuracies);
-        (w, a)
-    } else {
-        (white_wins.clone(), accuracies.clone())
-    };
     let summary = |side: Side| {
-        let mut s = SideSummary { accuracy: game_accuracy(&wins, &accs, side == Side::White), ..Default::default() };
+        let mut s =
+            SideSummary { accuracy: game_accuracy_from(&white_wins, &accuracies, side == Side::White, black_first), ..Default::default() };
         for r in reviews.iter().filter(|r| r.side == side) {
             match r.class {
                 MoveClass::Brilliant => s.brilliant += 1,
@@ -264,7 +262,7 @@ pub async fn run(
     let mut evals = Vec::with_capacity(total as usize);
     for ply in 0..total {
         if cancel.load(Ordering::SeqCst) {
-            return Err(Error::other("review cancelled"));
+            return Err(Error::Cancelled);
         }
         let played = &moves[..ply as usize];
         evals.push(evaluate(engine, start_fen, played, &pos, ply, go).await?);

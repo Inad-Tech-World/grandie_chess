@@ -1,0 +1,1255 @@
+{
+ "source": "https://www.pgnmentor.com/files.html",
+ "players": [
+  {
+   "file": "Abdusattorov",
+   "name": "Nodirbek Abdusattorov",
+   "games": 2554
+  },
+  {
+   "file": "Adams",
+   "name": "Michael Adams",
+   "games": 3605
+  },
+  {
+   "file": "Akobian",
+   "name": "Varuzhan Akobian",
+   "games": 1911
+  },
+  {
+   "file": "Akopian",
+   "name": "Vladimir Akopian",
+   "games": 1996
+  },
+  {
+   "file": "Alburt",
+   "name": "Lev Alburt",
+   "games": 776
+  },
+  {
+   "file": "Alekhine",
+   "name": "Alexander Alekhine",
+   "games": 1661
+  },
+  {
+   "file": "Alekseev",
+   "name": "Evgeny Alekseev",
+   "games": 3094
+  },
+  {
+   "file": "Almasi",
+   "name": "Zoltan Almasi",
+   "games": 2041
+  },
+  {
+   "file": "Anand",
+   "name": "Viswanathan Anand",
+   "games": 4204
+  },
+  {
+   "file": "Anderssen",
+   "name": "Adolf Anderssen",
+   "games": 681
+  },
+  {
+   "file": "Andersson",
+   "name": "Ulf Andersson",
+   "games": 2764
+  },
+  {
+   "file": "Andreikin",
+   "name": "Dmitry Andreikin",
+   "games": 6357
+  },
+  {
+   "file": "Aronian",
+   "name": "Levon Aronian",
+   "games": 5107
+  },
+  {
+   "file": "Ashley",
+   "name": "Maurice Ashley",
+   "games": 414
+  },
+  {
+   "file": "Averbakh",
+   "name": "Yuri Averbakh",
+   "games": 885
+  },
+  {
+   "file": "Azmaiparashvili",
+   "name": "Zurab Azmaiparashvili",
+   "games": 1324
+  },
+  {
+   "file": "Bacrot",
+   "name": "Etienne Bacrot",
+   "games": 4784
+  },
+  {
+   "file": "Bareev",
+   "name": "Evgeny Bareev",
+   "games": 2023
+  },
+  {
+   "file": "Beliavsky",
+   "name": "Alexander Beliavsky",
+   "games": 3314
+  },
+  {
+   "file": "Benjamin",
+   "name": "Joel Benjamin",
+   "games": 1819
+  },
+  {
+   "file": "Benko",
+   "name": "Pal Benko",
+   "games": 1376
+  },
+  {
+   "file": "Berliner",
+   "name": "Hans Berliner",
+   "games": 64
+  },
+  {
+   "file": "Bernstein",
+   "name": "Ossip Bernstein",
+   "games": 261
+  },
+  {
+   "file": "Bird",
+   "name": "Henry Bird",
+   "games": 353
+  },
+  {
+   "file": "Bisguier",
+   "name": "Arthur Bisguier",
+   "games": 1186
+  },
+  {
+   "file": "Blackburne",
+   "name": "Joseph Blackburne",
+   "games": 738
+  },
+  {
+   "file": "Blatny",
+   "name": "Pavel Blatny",
+   "games": 1924
+  },
+  {
+   "file": "Bogoljubow",
+   "name": "Efim Bogoljubow",
+   "games": 973
+  },
+  {
+   "file": "Boleslavsky",
+   "name": "Isaac Boleslavsky",
+   "games": 651
+  },
+  {
+   "file": "Bologan",
+   "name": "Viktor Bologan",
+   "games": 3320
+  },
+  {
+   "file": "Botvinnik",
+   "name": "Mikhail Botvinnik",
+   "games": 891
+  },
+  {
+   "file": "Breyer",
+   "name": "Gyula Breyer",
+   "games": 176
+  },
+  {
+   "file": "Bronstein",
+   "name": "David Bronstein",
+   "games": 1930
+  },
+  {
+   "file": "Browne",
+   "name": "Walter Browne",
+   "games": 1621
+  },
+  {
+   "file": "Bruzon",
+   "name": "Lazaro Bruzon",
+   "games": 690
+  },
+  {
+   "file": "Byrne",
+   "name": "Robert Byrne",
+   "games": 1013
+  },
+  {
+   "file": "Capablanca",
+   "name": "José Raúl Capablanca",
+   "games": 597
+  },
+  {
+   "file": "Carlsen",
+   "name": "Magnus Carlsen",
+   "games": 6615
+  },
+  {
+   "file": "Caruana",
+   "name": "Fabiano Caruana",
+   "games": 5341
+  },
+  {
+   "file": "Li",
+   "name": "Li Chao",
+   "games": 1342
+  },
+  {
+   "file": "Zhu",
+   "name": "Zhu Chen",
+   "games": 1205
+  },
+  {
+   "file": "Chiburdanidze",
+   "name": "Maia Chiburdanidze",
+   "games": 1346
+  },
+  {
+   "file": "Chigorin",
+   "name": "Mikhail Chigorin",
+   "games": 688
+  },
+  {
+   "file": "Christiansen",
+   "name": "Larry Christiansen",
+   "games": 1646
+  },
+  {
+   "file": "IllescasCordoba",
+   "name": "Miguel Illescas Cordoba",
+   "games": 1444
+  },
+  {
+   "file": "DeFirmian",
+   "name": "Nick DeFirmian",
+   "games": 1712
+  },
+  {
+   "file": "Denker",
+   "name": "Arnold Denker",
+   "games": 404
+  },
+  {
+   "file": "Dreev",
+   "name": "Alexey Dreev",
+   "games": 4331
+  },
+  {
+   "file": "Duda",
+   "name": "Jan-Krzysztof Duda",
+   "games": 3937
+  },
+  {
+   "file": "Dzindzichashvili",
+   "name": "Roman Dzindzichashvili",
+   "games": 780
+  },
+  {
+   "file": "Ehlvest",
+   "name": "Jaan Ehlvest",
+   "games": 3441
+  },
+  {
+   "file": "Eljanov",
+   "name": "Pavel Eljanov",
+   "games": 3274
+  },
+  {
+   "file": "Erigaisi",
+   "name": "Arjun Erigaisi",
+   "games": 3385
+  },
+  {
+   "file": "Euwe",
+   "name": "Max Euwe",
+   "games": 1122
+  },
+  {
+   "file": "Evans",
+   "name": "Larry Evans",
+   "games": 685
+  },
+  {
+   "file": "Fedorowicz",
+   "name": "John Fedorowicz",
+   "games": 1448
+  },
+  {
+   "file": "Fine",
+   "name": "Reuben Fine",
+   "games": 305
+  },
+  {
+   "file": "Finegold",
+   "name": "Benjamin Finegold",
+   "games": 1138
+  },
+  {
+   "file": "Firouzja",
+   "name": "Alireza Firouzja",
+   "games": 4204
+  },
+  {
+   "file": "Fischer",
+   "name": "Robert James Fischer",
+   "games": 827
+  },
+  {
+   "file": "Fishbein",
+   "name": "Alexander Fishbein",
+   "games": 1253
+  },
+  {
+   "file": "Flohr",
+   "name": "Salo Flohr",
+   "games": 986
+  },
+  {
+   "file": "Gaprindashvili",
+   "name": "Nona Gaprindashvili",
+   "games": 1237
+  },
+  {
+   "file": "Gashimov",
+   "name": "Vugar Gashimov",
+   "games": 953
+  },
+  {
+   "file": "Gelfand",
+   "name": "Boris Gelfand",
+   "games": 3983
+  },
+  {
+   "file": "Geller",
+   "name": "Efim Geller",
+   "games": 2198
+  },
+  {
+   "file": "Georgiev",
+   "name": "Kiril Georgiev",
+   "games": 3148
+  },
+  {
+   "file": "Giri",
+   "name": "Anish Giri",
+   "games": 4035
+  },
+  {
+   "file": "Gligoric",
+   "name": "Svetozar Gligoric",
+   "games": 2898
+  },
+  {
+   "file": "Goldin",
+   "name": "Alexander Goldin",
+   "games": 1114
+  },
+  {
+   "file": "Grischuk",
+   "name": "Alexander Grischuk",
+   "games": 5918
+  },
+  {
+   "file": "Gukesh",
+   "name": "Dommaraju Gukesh",
+   "games": 2053
+  },
+  {
+   "file": "Gulko",
+   "name": "Boris Gulko",
+   "games": 1876
+  },
+  {
+   "file": "Gunsberg",
+   "name": "Isidor Gunsberg",
+   "games": 319
+  },
+  {
+   "file": "GurevichD",
+   "name": "Dmitry Gurevich",
+   "games": 3924
+  },
+  {
+   "file": "GurevichM",
+   "name": "Mikhail Gurevich",
+   "games": 2525
+  },
+  {
+   "file": "WangH",
+   "name": "Wang Hao",
+   "games": 2031
+  },
+  {
+   "file": "Harikrishna",
+   "name": "Pentala Harikrishna",
+   "games": 2873
+  },
+  {
+   "file": "Hort",
+   "name": "Vlastimil Hort",
+   "games": 3152
+  },
+  {
+   "file": "Horwitz",
+   "name": "Bernhard Horwitz",
+   "games": 113
+  },
+  {
+   "file": "Ni",
+   "name": "Ni Hua",
+   "games": 1582
+  },
+  {
+   "file": "Huebner",
+   "name": "Robert Huebner",
+   "games": 2157
+  },
+  {
+   "file": "Koneru",
+   "name": "Koneru Humpy",
+   "games": 2037
+  },
+  {
+   "file": "Ibragimov",
+   "name": "Ildar Ibragimov",
+   "games": 1457
+  },
+  {
+   "file": "Inarkiev",
+   "name": "Ernesto Inarkiev",
+   "games": 2193
+  },
+  {
+   "file": "Ivanchuk",
+   "name": "Vassily Ivanchuk",
+   "games": 4950
+  },
+  {
+   "file": "IvanovA",
+   "name": "Alexander Ivanov",
+   "games": 1288
+  },
+  {
+   "file": "IvanovI",
+   "name": "Igor Ivanov",
+   "games": 784
+  },
+  {
+   "file": "Ivkov",
+   "name": "Borislav Ivkov",
+   "games": 2505
+  },
+  {
+   "file": "Jakovenko",
+   "name": "Dmitry Jakovenko",
+   "games": 1943
+  },
+  {
+   "file": "Janowski",
+   "name": "David Janowski",
+   "games": 769
+  },
+  {
+   "file": "Ye",
+   "name": "Ye Jiangchuan",
+   "games": 662
+  },
+  {
+   "file": "Jobava",
+   "name": "Baadur Jobava",
+   "games": 4440
+  },
+  {
+   "file": "Xie",
+   "name": "Xie Jun",
+   "games": 701
+  },
+  {
+   "file": "Jussupow",
+   "name": "Artur Jussupow",
+   "games": 2098
+  },
+  {
+   "file": "Kaidanov",
+   "name": "Gregory Kaidanov",
+   "games": 1510
+  },
+  {
+   "file": "Kamsky",
+   "name": "Gata Kamsky",
+   "games": 7035
+  },
+  {
+   "file": "Karjakin",
+   "name": "Sergey Karjakin",
+   "games": 3536
+  },
+  {
+   "file": "Karpov",
+   "name": "Anatoly Karpov",
+   "games": 3529
+  },
+  {
+   "file": "Kasimdzhanov",
+   "name": "Rustam Kasimdzhanov",
+   "games": 1785
+  },
+  {
+   "file": "Kasparov",
+   "name": "Garry Kasparov",
+   "games": 2128
+  },
+  {
+   "file": "Kavalek",
+   "name": "Lubomir Kavalek",
+   "games": 1328
+  },
+  {
+   "file": "Keres",
+   "name": "Paul Keres",
+   "games": 1571
+  },
+  {
+   "file": "Keymer",
+   "name": "Vincent Keymer",
+   "games": 2600
+  },
+  {
+   "file": "Khalifman",
+   "name": "Alexander Khalifman",
+   "games": 2348
+  },
+  {
+   "file": "SultanKhan",
+   "name": "Mir Sultan Khan",
+   "games": 157
+  },
+  {
+   "file": "Kholmov",
+   "name": "Ratmir Kholmov",
+   "games": 1900
+  },
+  {
+   "file": "Korchnoi",
+   "name": "Viktor Korchnoi",
+   "games": 4569
+  },
+  {
+   "file": "Korobov",
+   "name": "Anton Korobov",
+   "games": 3494
+  },
+  {
+   "file": "Kosteniuk",
+   "name": "Alexandra Kosteniuk",
+   "games": 5513
+  },
+  {
+   "file": "Kotov",
+   "name": "Alexander Kotov",
+   "games": 641
+  },
+  {
+   "file": "Kramnik",
+   "name": "Vladimir Kramnik",
+   "games": 4324
+  },
+  {
+   "file": "Krasenkow",
+   "name": "Michal Krasenkow",
+   "games": 3052
+  },
+  {
+   "file": "Krush",
+   "name": "Irina Krush",
+   "games": 2334
+  },
+  {
+   "file": "Kudrin",
+   "name": "Sergey Kudrin",
+   "games": 1244
+  },
+  {
+   "file": "DeLaBourdonnais",
+   "name": "Louis de LaBourdonnais",
+   "games": 101
+  },
+  {
+   "file": "Lahno",
+   "name": "Kateryna Lahno",
+   "games": 919
+  },
+  {
+   "file": "Larsen",
+   "name": "Bent Larsen",
+   "games": 2383
+  },
+  {
+   "file": "Lasker",
+   "name": "Emanuel Lasker",
+   "games": 900
+  },
+  {
+   "file": "Lautier",
+   "name": "Joel Lautier",
+   "games": 1809
+  },
+  {
+   "file": "Leko",
+   "name": "Peter Leko",
+   "games": 2681
+  },
+  {
+   "file": "Levenfish",
+   "name": "Grigory Levenfish",
+   "games": 354
+  },
+  {
+   "file": "Le",
+   "name": "Le Quang Liem",
+   "games": 2111
+  },
+  {
+   "file": "Lilienthal",
+   "name": "Andre Lilienthal",
+   "games": 649
+  },
+  {
+   "file": "Ding",
+   "name": "Ding Liren",
+   "games": 2116
+  },
+  {
+   "file": "Ljubojevic",
+   "name": "Ljubomir Ljubojevic",
+   "games": 1944
+  },
+  {
+   "file": "Lputian",
+   "name": "Smbat Lputian",
+   "games": 1552
+  },
+  {
+   "file": "MacKenzie",
+   "name": "George MacKenzie",
+   "games": 198
+  },
+  {
+   "file": "Malakhov",
+   "name": "Vladimir Malakhov",
+   "games": 2282
+  },
+  {
+   "file": "Mamedyarov",
+   "name": "Shakhriyar Mamedyarov",
+   "games": 4854
+  },
+  {
+   "file": "Maroczy",
+   "name": "Geza Maroczy",
+   "games": 756
+  },
+  {
+   "file": "Marshall",
+   "name": "Frank Marshall",
+   "games": 1027
+  },
+  {
+   "file": "McDonnell",
+   "name": "Alexander McDonnell",
+   "games": 106
+  },
+  {
+   "file": "McShane",
+   "name": "Luke McShane",
+   "games": 1734
+  },
+  {
+   "file": "Mecking",
+   "name": "Henrique Mecking",
+   "games": 626
+  },
+  {
+   "file": "Mikenas",
+   "name": "Vladas Mikenas",
+   "games": 497
+  },
+  {
+   "file": "Miles",
+   "name": "Anthony Miles",
+   "games": 2614
+  },
+  {
+   "file": "Milov",
+   "name": "Vadim Milov",
+   "games": 1398
+  },
+  {
+   "file": "Morozevich",
+   "name": "Alexander Morozevich",
+   "games": 2753
+  },
+  {
+   "file": "Morphy",
+   "name": "Paul Morphy",
+   "games": 211
+  },
+  {
+   "file": "Motylev",
+   "name": "Alexander Motylev",
+   "games": 2588
+  },
+  {
+   "file": "Movsesian",
+   "name": "Sergei Movsesian",
+   "games": 3311
+  },
+  {
+   "file": "Muzychuk",
+   "name": "Mariya Muzychuk",
+   "games": 1721
+  },
+  {
+   "file": "Najdorf",
+   "name": "Miguel Najdorf",
+   "games": 1604
+  },
+  {
+   "file": "Najer",
+   "name": "Evgeny Najer",
+   "games": 2529
+  },
+  {
+   "file": "Nakamura",
+   "name": "Hikaru Nakamura",
+   "games": 8727
+  },
+  {
+   "file": "Navara",
+   "name": "David Navara",
+   "games": 3871
+  },
+  {
+   "file": "Negi",
+   "name": "Parimarjan Negi",
+   "games": 1053
+  },
+  {
+   "file": "Nepomniachtchi",
+   "name": "Ian Nepomniachtchi",
+   "games": 4388
+  },
+  {
+   "file": "Nielsen",
+   "name": "Peter Nielsen",
+   "games": 2128
+  },
+  {
+   "file": "Nikolic",
+   "name": "Predrag Nikolic",
+   "games": 2607
+  },
+  {
+   "file": "Nimzowitsch",
+   "name": "Aron Nimzowitsch",
+   "games": 512
+  },
+  {
+   "file": "Nisipeanu",
+   "name": "Liviu-Dieter Nisipeanu",
+   "games": 2319
+  },
+  {
+   "file": "Novikov",
+   "name": "Igor Novikov",
+   "games": 1416
+  },
+  {
+   "file": "Nunn",
+   "name": "John Nunn",
+   "games": 1802
+  },
+  {
+   "file": "Olafsson",
+   "name": "Fridrik Olafsson",
+   "games": 916
+  },
+  {
+   "file": "Oll",
+   "name": "Lembit Oll",
+   "games": 1034
+  },
+  {
+   "file": "Onischuk",
+   "name": "Alexander Onischuk",
+   "games": 1637
+  },
+  {
+   "file": "Pachman",
+   "name": "Ludek Pachman",
+   "games": 1462
+  },
+  {
+   "file": "Paehtz",
+   "name": "Elisabeth Paehtz",
+   "games": 3218
+  },
+  {
+   "file": "Panno",
+   "name": "Oscar Panno",
+   "games": 1873
+  },
+  {
+   "file": "Paulsen",
+   "name": "Louis Paulsen",
+   "games": 322
+  },
+  {
+   "file": "DominguezPerez",
+   "name": "Leinier Dominguez Perez",
+   "games": 2692
+  },
+  {
+   "file": "Petrosian",
+   "name": "Tigran Petrosian",
+   "games": 1893
+  },
+  {
+   "file": "Philidor",
+   "name": "Francois Philidor",
+   "games": 6
+  },
+  {
+   "file": "Pillsbury",
+   "name": "Harry Pillsbury",
+   "games": 388
+  },
+  {
+   "file": "Pilnik",
+   "name": "Herman Pilnik",
+   "games": 899
+  },
+  {
+   "file": "PolgarJ",
+   "name": "Judit Polgar",
+   "games": 1825
+  },
+  {
+   "file": "PolgarS",
+   "name": "Sofia Polgar",
+   "games": 856
+  },
+  {
+   "file": "PolgarZ",
+   "name": "Zsuzsa Polgar",
+   "games": 909
+  },
+  {
+   "file": "Polugaevsky",
+   "name": "Lev Polugaevsky",
+   "games": 1890
+  },
+  {
+   "file": "Ponomariov",
+   "name": "Ruslan Ponomariov",
+   "games": 2517
+  },
+  {
+   "file": "VallejoPons",
+   "name": "Francisco Vallejo Pons",
+   "games": 2856
+  },
+  {
+   "file": "Portisch",
+   "name": "Lajos Portisch",
+   "games": 3030
+  },
+  {
+   "file": "Praggnanandhaa",
+   "name": "Rameshbabu Praggnanandhaa",
+   "games": 2443
+  },
+  {
+   "file": "Psakhis",
+   "name": "Lev Psakhis",
+   "games": 1963
+  },
+  {
+   "file": "Quinteros",
+   "name": "Miguel Quinteros",
+   "games": 1136
+  },
+  {
+   "file": "Radjabov",
+   "name": "Teimour Radjabov",
+   "games": 2619
+  },
+  {
+   "file": "Rapport",
+   "name": "Richard Rapport",
+   "games": 2040
+  },
+  {
+   "file": "TorreRepetto",
+   "name": "Carlos Torre Repetto",
+   "games": 175
+  },
+  {
+   "file": "Reshevsky",
+   "name": "Samuel Reshevsky",
+   "games": 1267
+  },
+  {
+   "file": "Reti",
+   "name": "Richard Reti",
+   "games": 646
+  },
+  {
+   "file": "Ribli",
+   "name": "Zoltan Ribli",
+   "games": 2252
+  },
+  {
+   "file": "BecerraRivero",
+   "name": "Julio Becerra Rivero",
+   "games": 1203
+  },
+  {
+   "file": "Rohde",
+   "name": "Michael Rohde",
+   "games": 445
+  },
+  {
+   "file": "Rubinstein",
+   "name": "Akiba Rubinstein",
+   "games": 797
+  },
+  {
+   "file": "Rublevsky",
+   "name": "Sergei Rublevsky",
+   "games": 1853
+  },
+  {
+   "file": "Saemisch",
+   "name": "Friedrich Saemisch",
+   "games": 551
+  },
+  {
+   "file": "Sakaev",
+   "name": "Konstantin Sakaev",
+   "games": 1795
+  },
+  {
+   "file": "Salov",
+   "name": "Valery Salov",
+   "games": 766
+  },
+  {
+   "file": "Sasikiran",
+   "name": "Krishnan Sasikiran",
+   "games": 2169
+  },
+  {
+   "file": "Schlechter",
+   "name": "Carl Schlechter",
+   "games": 739
+  },
+  {
+   "file": "Seirawan",
+   "name": "Yasser Seirawan",
+   "games": 1519
+  },
+  {
+   "file": "Serper",
+   "name": "Gregory Serper",
+   "games": 848
+  },
+  {
+   "file": "Shabalov",
+   "name": "Alexander Shabalov",
+   "games": 2709
+  },
+  {
+   "file": "Shamkovich",
+   "name": "Leonid Shamkovich",
+   "games": 977
+  },
+  {
+   "file": "Shirov",
+   "name": "Alexei Shirov",
+   "games": 5644
+  },
+  {
+   "file": "Short",
+   "name": "Nigel Short",
+   "games": 3228
+  },
+  {
+   "file": "Shulman",
+   "name": "Yury Shulman",
+   "games": 1191
+  },
+  {
+   "file": "Smirin",
+   "name": "Ilia Smirin",
+   "games": 2792
+  },
+  {
+   "file": "Smyslov",
+   "name": "Vasily Smyslov",
+   "games": 2627
+  },
+  {
+   "file": "So",
+   "name": "Wesley So",
+   "games": 4440
+  },
+  {
+   "file": "Sokolov",
+   "name": "Ivan Sokolov",
+   "games": 3181
+  },
+  {
+   "file": "Soltis",
+   "name": "Andrew Soltis",
+   "games": 370
+  },
+  {
+   "file": "Spassky",
+   "name": "Boris Spassky",
+   "games": 2231
+  },
+  {
+   "file": "Speelman",
+   "name": "Jonathan Speelman",
+   "games": 2358
+  },
+  {
+   "file": "Spielmann",
+   "name": "Rudolf Spielmann",
+   "games": 1057
+  },
+  {
+   "file": "Stahlberg",
+   "name": "Gideon Stahlberg",
+   "games": 964
+  },
+  {
+   "file": "Staunton",
+   "name": "Howard Staunton",
+   "games": 284
+  },
+  {
+   "file": "Stefanova",
+   "name": "Antoaneta Stefanova",
+   "games": 3521
+  },
+  {
+   "file": "Stein",
+   "name": "Leonid Stein",
+   "games": 699
+  },
+  {
+   "file": "Steinitz",
+   "name": "William Steinitz",
+   "games": 590
+  },
+  {
+   "file": "Suetin",
+   "name": "Alexey Suetin",
+   "games": 1284
+  },
+  {
+   "file": "Sutovsky",
+   "name": "Emil Sutovsky",
+   "games": 1397
+  },
+  {
+   "file": "Svidler",
+   "name": "Peter Svidler",
+   "games": 4378
+  },
+  {
+   "file": "Szabo",
+   "name": "Laszlo Szabo",
+   "games": 1777
+  },
+  {
+   "file": "Taimanov",
+   "name": "Mark Taimanov",
+   "games": 2117
+  },
+  {
+   "file": "Tal",
+   "name": "Mikhail Tal",
+   "games": 2431
+  },
+  {
+   "file": "Tarrasch",
+   "name": "Siegbert Tarrasch",
+   "games": 704
+  },
+  {
+   "file": "Tartakower",
+   "name": "Savielly Tartakower",
+   "games": 1290
+  },
+  {
+   "file": "Teichmann",
+   "name": "Richard Teichmann",
+   "games": 536
+  },
+  {
+   "file": "Timman",
+   "name": "Jan Timman",
+   "games": 3622
+  },
+  {
+   "file": "Tiviakov",
+   "name": "Sergei Tiviakov",
+   "games": 3100
+  },
+  {
+   "file": "Tkachiev",
+   "name": "Vladislav Tkachiev",
+   "games": 1598
+  },
+  {
+   "file": "Tomashevsky",
+   "name": "Evgeny Tomashevsky",
+   "games": 2021
+  },
+  {
+   "file": "Topalov",
+   "name": "Veselin Topalov",
+   "games": 2614
+  },
+  {
+   "file": "Uhlmann",
+   "name": "Wolfgang Uhlmann",
+   "games": 2537
+  },
+  {
+   "file": "Unzicker",
+   "name": "Wolfgang Unzicker",
+   "games": 1265
+  },
+  {
+   "file": "Ushenina",
+   "name": "Anna Ushenina",
+   "games": 2086
+  },
+  {
+   "file": "VachierLagrave",
+   "name": "Maxime Vachier-Lagrave",
+   "games": 5106
+  },
+  {
+   "file": "Vaganian",
+   "name": "Rafael Vaganian",
+   "games": 2660
+  },
+  {
+   "file": "Vitiugov",
+   "name": "Nikita Vitiugov",
+   "games": 2204
+  },
+  {
+   "file": "Volokitin",
+   "name": "Andrei Volokitin",
+   "games": 1878
+  },
+  {
+   "file": "Waitzkin",
+   "name": "Joshua Waitzkin",
+   "games": 385
+  },
+  {
+   "file": "VanWely",
+   "name": "Loek Van Wely",
+   "games": 4077
+  },
+  {
+   "file": "Winawer",
+   "name": "Simon Winawer",
+   "games": 241
+  },
+  {
+   "file": "Wojtaszek",
+   "name": "Radoslaw Wojtaszek",
+   "games": 2744
+  },
+  {
+   "file": "Wojtkiewicz",
+   "name": "Aleksander Wojtkiewicz",
+   "games": 1564
+  },
+  {
+   "file": "Wolff",
+   "name": "Patrick Wolff",
+   "games": 640
+  },
+  {
+   "file": "Bu",
+   "name": "Bu Xiangzhi",
+   "games": 2037
+  },
+  {
+   "file": "Yu",
+   "name": "Yu Yangyi",
+   "games": 2425
+  },
+  {
+   "file": "Yermolinsky",
+   "name": "Alex Yermolinsky",
+   "games": 1613
+  },
+  {
+   "file": "Wei",
+   "name": "Wei Yi",
+   "games": 1806
+  },
+  {
+   "file": "Hou",
+   "name": "Hou Yifan",
+   "games": 2357
+  },
+  {
+   "file": "Yudasin",
+   "name": "Leonid Yudasin",
+   "games": 1627
+  },
+  {
+   "file": "Wang",
+   "name": "Wang Yue",
+   "games": 1703
+  },
+  {
+   "file": "Xu",
+   "name": "Xu Yuhua",
+   "games": 491
+  },
+  {
+   "file": "Zukertort",
+   "name": "Johannes Zukertort",
+   "games": 265
+  },
+  {
+   "file": "GrandaZuniga",
+   "name": "Julio Granda Zuniga",
+   "games": 1917
+  },
+  {
+   "file": "Zvjaginsev",
+   "name": "Vadim Zvjaginsev",
+   "games": 2610
+  }
+ ]
+}

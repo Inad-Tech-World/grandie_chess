@@ -8,92 +8,181 @@ import * as __TAURI_EVENT from "@tauri-apps/api/event";
 /** Commands */
 export const commands = {
 	appInfo: () => __TAURI_INVOKE<AppInfo>("app_info"),
-	chessPositionInfo: (fen: string) => typedError<PositionInfo, string>(__TAURI_INVOKE("chess_position_info", { fen })),
-	chessApplyMove: (fen: string, uci: string) => typedError<AppliedMove, string>(__TAURI_INVOKE("chess_apply_move", { fen, uci })),
+	aiKeyStatus: () => typedError<boolean, ErrorPayload>(__TAURI_INVOKE("ai_key_status")),
+	/**
+	 *  Save (or with an empty string, remove) the OpenRouter key in the system
+	 *  credential store. A new key is checked with OpenRouter first; saving one
+	 *  switches AI on, removing it switches AI off.
+	 */
+	aiKeySet: (key: string) => typedError<null, ErrorPayload>(__TAURI_INVOKE("ai_key_set", { key })),
+	/**  Credits used and the key's limit. */
+	aiKeyInfo: () => typedError<AiKeyInfo, ErrorPayload>(__TAURI_INVOKE("ai_key_info")),
+	/**
+	 *  OpenRouter's models with an output modality: "text", "speech" or
+	 *  "transcription". The catalogue is public, so this works without a key.
+	 */
+	aiModels: (modality: string | null) => typedError<AiModel[], ErrorPayload>(__TAURI_INVOKE("ai_models", { modality })),
+	/**  Voices a text-to-speech model offers. */
+	aiVoices: (model: string) => typedError<string[], ErrorPayload>(__TAURI_INVOKE("ai_voices", { model })),
+	/**  What AI requests cost over the last `days` days. */
+	aiUsage: (days: number) => typedError<AiUsageSummary, ErrorPayload>(__TAURI_INVOKE("ai_usage", { days })),
+	coachList: () => __TAURI_INVOKE<CoachInfo[]>("coach_list"),
+	/**  Demonstrate why a move is good or bad, and what was better. */
+	coachExplainMove: (request: ExplainMoveRequest) => typedError<CoachScript, ErrorPayload>(__TAURI_INVOKE("coach_explain_move", { request })),
+	coachCheckMove: (fenBefore: string, played: string, lastMoveBefore: string | null, alwaysExplain: boolean, coachId: string | null) => typedError<CoachVerdict, ErrorPayload>(__TAURI_INVOKE("coach_check_move", { fenBefore, played, lastMoveBefore, alwaysExplain, coachId })),
+	/**  Play an engine line on the board and explain where it leads. */
+	coachExplainLine: (fen: string, lastMove: string | null, line: string[], whiteWin: number | null, coachId: string | null) => typedError<CoachScript, ErrorPayload>(__TAURI_INVOKE("coach_explain_line", { fen, lastMove, line, whiteWin, coachId })),
+	/**  Walk through a reviewed game's key moments, demonstrating each. */
+	coachWalkGame: (review: ReviewResult, moves: string[], plies: number[] | null, coachId: string | null) => typedError<CoachScript, ErrorPayload>(__TAURI_INVOKE("coach_walk_game", { review, moves, plies, coachId })),
+	/**
+	 *  Ask the coach about the position. The answer streams as [`CoachEvent`]s
+	 *  (text, tool use, and lines to show on the board); the full text is also
+	 *  returned. Needs an OpenRouter key.
+	 */
+	coachAsk: (requestId: string, context: AskContext, question: string, history: ChatTurn[], coachId: string | null) => typedError<string, ErrorPayload>(__TAURI_INVOKE("coach_ask", { requestId, context, question, history, coachId })),
+	coachCancel: (requestId: string) => __TAURI_INVOKE<void>("coach_cancel", { requestId }),
+	mastersPlayers: () => typedError<MasterPlayer[], ErrorPayload>(__TAURI_INVOKE("masters_players")),
+	/**  The bundled famous games (imported on first use). */
+	mastersLegends: () => typedError<LegendGame[], ErrorPayload>(__TAURI_INVOKE("masters_legends")),
+	/**
+	 *  Download a player's games from PGN Mentor and add them to the library.
+	 *  Progress: `DownloadProgress` with id `masters:<id>`, then `ImportProgress`
+	 *  with the same job id.
+	 */
+	mastersDownload: (id: string) => typedError<ImportSummary, ErrorPayload>(__TAURI_INVOKE("masters_download", { id })),
+	/**  Import PGN files as one master's games (e.g. exported from ChessBase). */
+	mastersImportFiles: (jobId: string, paths: string[], player: string) => typedError<ImportSummary, ErrorPayload>(__TAURI_INVOKE("masters_import_files", { jobId, paths, player })),
+	/**  Remove a player's games from the library. */
+	mastersRemove: (id: string) => typedError<number, ErrorPayload>(__TAURI_INVOKE("masters_remove", { id })),
+	mastersProfile: (id: string) => typedError<PlayerStats, ErrorPayload>(__TAURI_INVOKE("masters_profile", { id })),
+	/**
+	 *  Measure a master's style with the coach's engine over a sample of their
+	 *  decisive games. Progress: `ReviewProgress` with review id `style:<id>`
+	 *  (one step per game); cancel with `review_cancel`.
+	 */
+	mastersAnalyseStyle: (id: string, games: number, coachId: string | null) => typedError<StyleMetrics, ErrorPayload>(__TAURI_INVOKE("masters_analyse_style", { id, games, coachId })),
+	/**
+	 *  The coach's write-up of a master's style (needs an OpenRouter key).
+	 *  Cached until more games are added.
+	 */
+	mastersStyleReport: (id: string, refresh: boolean) => typedError<string, ErrorPayload>(__TAURI_INVOKE("masters_style_report", { id, refresh })),
+	/**
+	 *  A guided replay of a master game: the coach plays through it and stops
+	 *  at the moments that show the master's ideas. Reviews the game first if
+	 *  needed (progress: `ReviewProgress` with id `walk:<gameId>`).
+	 */
+	mastersWalkthrough: (request: WalkthroughRequest) => typedError<CoachScript, ErrorPayload>(__TAURI_INVOKE("masters_walkthrough", { request })),
+	/**  Score a guess in "Guess the move" and explain the master's choice. */
+	mastersGuess: (fen: string, guess: string, masterMove: string, masterName: string, coachId: string | null) => typedError<GuessResult, ErrorPayload>(__TAURI_INVOKE("masters_guess", { fen, guess, masterMove, masterName, coachId })),
+	/**  Start listening. Needs an OpenRouter key (speech is transcribed there). */
+	voiceStart: () => typedError<null, ErrorPayload>(__TAURI_INVOKE("voice_start")),
+	/**
+	 *  Stop listening, transcribe, and work out what was meant. `fen` is the
+	 *  position on the board, so spoken moves can be matched to legal moves.
+	 */
+	voiceStop: (fen: string | null) => typedError<VoiceResult, ErrorPayload>(__TAURI_INVOKE("voice_stop", { fen })),
+	voiceCancel: () => __TAURI_INVOKE<void>("voice_cancel"),
+	/**  Work out what typed or spoken text means (no microphone involved). */
+	voiceInterpret: (text: string, fen: string | null) => __TAURI_INVOKE<VoiceIntent>("voice_interpret", { text, fen }),
+	/**  Speak text with the cloud voice; returns MP3 audio as base64. */
+	voiceSpeak: (text: string) => typedError<string, ErrorPayload>(__TAURI_INVOKE("voice_speak", { text })),
+	chessPositionInfo: (fen: string) => typedError<PositionInfo, ErrorPayload>(__TAURI_INVOKE("chess_position_info", { fen })),
+	chessApplyMove: (fen: string, uci: string) => typedError<AppliedMove, ErrorPayload>(__TAURI_INVOKE("chess_apply_move", { fen, uci })),
 	/**  Play a line of SAN moves from a position, e.g. an engine line to add as a variation. */
-	chessApplySanLine: (fen: string, sans: string[]) => typedError<AppliedMove[], string>(__TAURI_INVOKE("chess_apply_san_line", { fen, sans })),
+	chessApplySanLine: (fen: string, sans: string[]) => typedError<AppliedMove[], ErrorPayload>(__TAURI_INVOKE("chess_apply_san_line", { fen, sans })),
 	settingsGet: () => __TAURI_INVOKE<Settings>("settings_get"),
-	settingsSet: (settings: Settings) => typedError<null, string>(__TAURI_INVOKE("settings_set", { settings })),
+	settingsSet: (settings: Settings) => typedError<null, ErrorPayload>(__TAURI_INVOKE("settings_set", { settings })),
 	networksList: () => __TAURI_INVOKE<NetworkEntry[]>("networks_list"),
-	networkDownload: (id: string) => typedError<null, string>(__TAURI_INVOKE("network_download", { id })),
-	networkDelete: (id: string) => typedError<null, string>(__TAURI_INVOKE("network_delete", { id })),
+	networkDownload: (id: string) => typedError<null, ErrorPayload>(__TAURI_INVOKE("network_download", { id })),
+	networkDelete: (id: string) => typedError<null, ErrorPayload>(__TAURI_INVOKE("network_delete", { id })),
 	/**
 	 *  Times every GPU and the CPU, saves the fastest backend in settings and
 	 *  returns all results.
 	 */
-	engineDetectBackend: () => typedError<BackendResult[], string>(__TAURI_INVOKE("engine_detect_backend")),
-	levelsList: () => __TAURI_INVOKE<OpponentLevel[]>("levels_list"),
-	/**  Network ids the opponent needs that are not installed. */
-	playMissingNetworks: (opponent: string) => typedError<string[], string>(__TAURI_INVOKE("play_missing_networks", { opponent })),
-	playStart: (setup: PlaySetup) => typedError<PlaySnapshot, string>(__TAURI_INVOKE("play_start", { setup })),
-	playSnapshot: (sessionId: number) => typedError<PlaySnapshot, string>(__TAURI_INVOKE("play_snapshot", { sessionId })),
-	playMove: (sessionId: number, uci: string) => typedError<PlaySnapshot, string>(__TAURI_INVOKE("play_move", { sessionId, uci })),
-	playTakeback: (sessionId: number) => typedError<PlaySnapshot, string>(__TAURI_INVOKE("play_takeback", { sessionId })),
-	playResign: (sessionId: number) => typedError<PlaySnapshot, string>(__TAURI_INVOKE("play_resign", { sessionId })),
-	playOfferDraw: (sessionId: number) => typedError<boolean, string>(__TAURI_INVOKE("play_offer_draw", { sessionId })),
-	/**  Ask the full-strength engine for a move suggestion (shown as an arrow). */
-	playHint: (sessionId: number) => typedError<string, string>(__TAURI_INVOKE("play_hint", { sessionId })),
-	playPgn: (sessionId: number) => typedError<string, string>(__TAURI_INVOKE("play_pgn", { sessionId })),
-	playClose: (sessionId: number) => typedError<null, string>(__TAURI_INVOKE("play_close", { sessionId })),
-	pgnParse: (text: string) => __TAURI_INVOKE<PgnParseResult>("pgn_parse", { text }),
-	pgnReadFile: (path: string) => typedError<PgnParseResult, string>(__TAURI_INVOKE("pgn_read_file", { path })),
-	pgnWrite: (tree: GameTree) => __TAURI_INVOKE<string>("pgn_write", { tree }),
-	fileReadText: (path: string) => typedError<string, string>(__TAURI_INVOKE("file_read_text", { path })),
-	fileWriteText: (path: string, contents: string) => typedError<null, string>(__TAURI_INVOKE("file_write_text", { path, contents })),
+	engineDetectBackend: () => typedError<BackendResult[], ErrorPayload>(__TAURI_INVOKE("engine_detect_backend")),
 	enginesList: () => __TAURI_INVOKE<EngineConfig[]>("engines_list"),
 	/**  Add a UCI engine from an executable the user picked. */
-	engineAdd: (path: string) => typedError<EngineConfig, string>(__TAURI_INVOKE("engine_add", { path })),
-	engineUpdate: (config: EngineConfig) => typedError<null, string>(__TAURI_INVOKE("engine_update", { config })),
-	engineRemove: (id: string) => typedError<null, string>(__TAURI_INVOKE("engine_remove", { id })),
-	/**  Download the official Stockfish release for this platform and add it as an engine. */
-	engineInstallStockfish: () => typedError<EngineConfig, string>(__TAURI_INVOKE("engine_install_stockfish")),
-	analysisStart: (request: AnalysisRequest) => typedError<null, string>(__TAURI_INVOKE("analysis_start", { request })),
-	analysisStop: (engineId: string) => typedError<null, string>(__TAURI_INVOKE("analysis_stop", { engineId })),
+	engineAdd: (path: string) => typedError<EngineConfig, ErrorPayload>(__TAURI_INVOKE("engine_add", { path })),
+	engineUpdate: (config: EngineConfig) => typedError<null, ErrorPayload>(__TAURI_INVOKE("engine_update", { config })),
+	engineRemove: (id: string) => typedError<null, ErrorPayload>(__TAURI_INVOKE("engine_remove", { id })),
+	/**
+	 *  Download the official Stockfish release (pinned, checksummed) and add it
+	 *  as an engine. A running Stockfish is shut down first so it can be replaced.
+	 */
+	engineInstallStockfish: () => typedError<EngineConfig, ErrorPayload>(__TAURI_INVOKE("engine_install_stockfish")),
+	analysisStart: (request: AnalysisRequest) => typedError<null, ErrorPayload>(__TAURI_INVOKE("analysis_start", { request })),
+	analysisStop: (engineId: string) => typedError<null, ErrorPayload>(__TAURI_INVOKE("analysis_stop", { engineId })),
 	/**  The backend an engine reported, e.g. "metal (AMD Radeon Pro 560X)". */
-	analysisBackend: (engineId: string) => typedError<string | null, string>(__TAURI_INVOKE("analysis_backend", { engineId })),
-	reviewStart: (reviewId: string, startFen: string, moves: string[], depth: ReviewDepth, engineId: string | null) => typedError<ReviewResult, string>(__TAURI_INVOKE("review_start", { reviewId, startFen, moves, depth, engineId })),
+	analysisBackend: (engineId: string) => typedError<string | null, ErrorPayload>(__TAURI_INVOKE("analysis_backend", { engineId })),
+	levelsList: () => __TAURI_INVOKE<OpponentLevel[]>("levels_list"),
+	/**  Network ids the opponent needs that are not installed. */
+	playMissingNetworks: (opponent: string) => typedError<string[], ErrorPayload>(__TAURI_INVOKE("play_missing_networks", { opponent })),
+	playStart: (setup: PlaySetup) => typedError<PlaySnapshot, ErrorPayload>(__TAURI_INVOKE("play_start", { setup })),
+	playSnapshot: (sessionId: number) => typedError<PlaySnapshot, ErrorPayload>(__TAURI_INVOKE("play_snapshot", { sessionId })),
+	playMove: (sessionId: number, uci: string) => typedError<PlaySnapshot, ErrorPayload>(__TAURI_INVOKE("play_move", { sessionId, uci })),
+	playTakeback: (sessionId: number) => typedError<PlaySnapshot, ErrorPayload>(__TAURI_INVOKE("play_takeback", { sessionId })),
+	playResign: (sessionId: number) => typedError<PlaySnapshot, ErrorPayload>(__TAURI_INVOKE("play_resign", { sessionId })),
+	playOfferDraw: (sessionId: number) => typedError<boolean, ErrorPayload>(__TAURI_INVOKE("play_offer_draw", { sessionId })),
+	/**  Ask the full-strength engine for a move suggestion (shown as an arrow). */
+	playHint: (sessionId: number) => typedError<string, ErrorPayload>(__TAURI_INVOKE("play_hint", { sessionId })),
+	playPgn: (sessionId: number) => typedError<string, ErrorPayload>(__TAURI_INVOKE("play_pgn", { sessionId })),
+	playClose: (sessionId: number) => typedError<null, ErrorPayload>(__TAURI_INVOKE("play_close", { sessionId })),
+	pgnParse: (text: string) => __TAURI_INVOKE<PgnParseResult>("pgn_parse", { text }),
+	pgnReadFile: (path: string) => typedError<PgnParseResult, ErrorPayload>(__TAURI_INVOKE("pgn_read_file", { path })),
+	pgnWrite: (tree: GameTree) => __TAURI_INVOKE<string>("pgn_write", { tree }),
+	fileReadText: (path: string) => typedError<string, ErrorPayload>(__TAURI_INVOKE("file_read_text", { path })),
+	fileWriteText: (path: string, contents: string) => typedError<null, ErrorPayload>(__TAURI_INVOKE("file_write_text", { path, contents })),
+	/**
+	 *  Review a whole game. `engine_id` defaults to the review engine from
+	 *  settings (Stockfish when installed). Cancel with [`review_cancel`], which
+	 *  works from the moment this is called, even while the engine starts.
+	 */
+	reviewStart: (reviewId: string, startFen: string, moves: string[], depth: ReviewDepth, engineId: string | null) => typedError<ReviewResult, ErrorPayload>(__TAURI_INVOKE("review_start", { reviewId, startFen, moves, depth, engineId })),
 	reviewCancel: (reviewId: string) => __TAURI_INVOKE<void>("review_cancel", { reviewId }),
 	/**  Evaluate a candidate move ("retry this position"). */
-	reviewCheckMove: (fen: string, uci: string) => typedError<MoveCheck, string>(__TAURI_INVOKE("review_check_move", { fen, uci })),
-	dbQuery: (query: GameQuery) => typedError<GamePage, string>(__TAURI_INVOKE("db_query", { query })),
-	dbGame: (id: number) => typedError<DbGame, string>(__TAURI_INVOKE("db_game", { id })),
-	dbDelete: (ids: number[]) => typedError<number, string>(__TAURI_INVOKE("db_delete", { ids })),
-	dbStats: () => typedError<DbStats, string>(__TAURI_INVOKE("db_stats")),
-	dbFind: (source: string, sourceId: string) => typedError<number | null, string>(__TAURI_INVOKE("db_find", { source, sourceId })),
-	dbSaveReview: (gameId: number, review: ReviewResult) => typedError<null, string>(__TAURI_INVOKE("db_save_review", { gameId, review })),
+	reviewCheckMove: (fen: string, uci: string) => typedError<MoveCheck, ErrorPayload>(__TAURI_INVOKE("review_check_move", { fen, uci })),
+	dbQuery: (query: GameQuery) => typedError<GamePage, ErrorPayload>(__TAURI_INVOKE("db_query", { query })),
+	dbGame: (id: number) => typedError<DbGame, ErrorPayload>(__TAURI_INVOKE("db_game", { id })),
+	dbDelete: (ids: number[]) => typedError<number, ErrorPayload>(__TAURI_INVOKE("db_delete", { ids })),
+	dbStats: () => typedError<DbStats, ErrorPayload>(__TAURI_INVOKE("db_stats")),
+	dbFind: (source: string, sourceId: string) => typedError<number | null, ErrorPayload>(__TAURI_INVOKE("db_find", { source, sourceId })),
+	dbSaveReview: (gameId: number, review: ReviewResult) => typedError<null, ErrorPayload>(__TAURI_INVOKE("db_save_review", { gameId, review })),
 	/**  Import PGN files into the database. */
-	dbImportFiles: (jobId: string, paths: string[]) => typedError<ImportSummary, string>(__TAURI_INVOKE("db_import_files", { jobId, paths })),
+	dbImportFiles: (jobId: string, paths: string[]) => typedError<ImportSummary, ErrorPayload>(__TAURI_INVOKE("db_import_files", { jobId, paths })),
 	/**  Import (new) games of a Lichess user. */
-	dbImportLichess: (jobId: string, username: string) => typedError<ImportSummary, string>(__TAURI_INVOKE("db_import_lichess", { jobId, username })),
+	dbImportLichess: (jobId: string, username: string) => typedError<ImportSummary, ErrorPayload>(__TAURI_INVOKE("db_import_lichess", { jobId, username })),
 	/**  Import (new) games of a Chess.com user, month by month. */
-	dbImportChesscom: (jobId: string, username: string) => typedError<ImportSummary, string>(__TAURI_INVOKE("db_import_chesscom", { jobId, username })),
-	/**  Add games played in Grandie (saved as PGN files) to the database. */
-	dbImportGrandie: () => typedError<ImportSummary, string>(__TAURI_INVOKE("db_import_grandie")),
+	dbImportChesscom: (jobId: string, username: string) => typedError<ImportSummary, ErrorPayload>(__TAURI_INVOKE("db_import_chesscom", { jobId, username })),
+	/**
+	 *  Add games played in Grandie (saved as PGN files) to the database. A file
+	 *  that can't be read is reported and skipped; the rest are still imported.
+	 */
+	dbImportGrandie: () => typedError<ImportSummary, ErrorPayload>(__TAURI_INVOKE("db_import_grandie")),
 	/**  Name of the opening reached by a line (deepest named position). */
 	openingName: (rootFen: string, moves: string[]) => __TAURI_INVOKE<{
 	eco: string,
 	name: string,
 } | null>("opening_name", { rootFen, moves }),
-	explorerDb: (fen: string, filter: ExplorerFilter) => typedError<ExplorerResult, string>(__TAURI_INVOKE("explorer_db", { fen, filter })),
+	explorerDb: (fen: string, filter: ExplorerFilter) => typedError<ExplorerResult, ErrorPayload>(__TAURI_INVOKE("explorer_db", { fen, filter })),
 	/**  Moves from the Lichess explorer ("lichess" or "masters"); needs a Lichess token. */
-	explorerLichess: (db: string, fen: string, speeds: string[], ratings: number[]) => typedError<ExplorerResult, string>(__TAURI_INVOKE("explorer_lichess", { db, fen, speeds, ratings })),
-	lichessTokenStatus: () => typedError<boolean, string>(__TAURI_INVOKE("lichess_token_status")),
+	explorerLichess: (db: string, fen: string, speeds: string[], ratings: number[]) => typedError<ExplorerResult, ErrorPayload>(__TAURI_INVOKE("explorer_lichess", { db, fen, speeds, ratings })),
+	lichessTokenStatus: () => typedError<boolean, ErrorPayload>(__TAURI_INVOKE("lichess_token_status")),
 	/**
 	 *  Store (or with an empty string, remove) the Lichess API token in the system
 	 *  credential store (the Keychain on macOS, Credential Manager on Windows).
 	 */
-	lichessTokenSet: (token: string) => typedError<null, string>(__TAURI_INVOKE("lichess_token_set", { token })),
-	repertoireMoves: (color: Side) => typedError<RepMove[], string>(__TAURI_INVOKE("repertoire_moves", { color })),
-	repertoireAddLine: (color: Side, moves: string[]) => typedError<number, string>(__TAURI_INVOKE("repertoire_add_line", { color, moves })),
-	repertoireRemoveMove: (id: number) => typedError<null, string>(__TAURI_INVOKE("repertoire_remove_move", { id })),
-	repertoireSetComment: (id: number, comment: string | null) => typedError<null, string>(__TAURI_INVOKE("repertoire_set_comment", { id, comment })),
-	repertoireImportPgn: (color: Side, pgn: string) => typedError<number, string>(__TAURI_INVOKE("repertoire_import_pgn", { color, pgn })),
-	repertoireExportPgn: (color: Side) => typedError<string, string>(__TAURI_INVOKE("repertoire_export_pgn", { color })),
-	repertoireStats: (color: Side) => typedError<RepertoireStats, string>(__TAURI_INVOKE("repertoire_stats", { color })),
+	lichessTokenSet: (token: string) => typedError<null, ErrorPayload>(__TAURI_INVOKE("lichess_token_set", { token })),
+	repertoireMoves: (color: Side) => typedError<RepMove[], ErrorPayload>(__TAURI_INVOKE("repertoire_moves", { color })),
+	repertoireAddLine: (color: Side, moves: string[]) => typedError<number, ErrorPayload>(__TAURI_INVOKE("repertoire_add_line", { color, moves })),
+	repertoireRemoveMove: (id: number) => typedError<null, ErrorPayload>(__TAURI_INVOKE("repertoire_remove_move", { id })),
+	repertoireSetComment: (id: number, comment: string | null) => typedError<null, ErrorPayload>(__TAURI_INVOKE("repertoire_set_comment", { id, comment })),
+	repertoireImportPgn: (color: Side, pgn: string) => typedError<number, ErrorPayload>(__TAURI_INVOKE("repertoire_import_pgn", { color, pgn })),
+	repertoireExportPgn: (color: Side) => typedError<string, ErrorPayload>(__TAURI_INVOKE("repertoire_export_pgn", { color })),
+	repertoireStats: (color: Side) => typedError<RepertoireStats, ErrorPayload>(__TAURI_INVOKE("repertoire_stats", { color })),
 	/**  Cards to drill now: due reviews first, then up to `new_limit` new ones. */
-	repertoireDue: (color: "white" | "black" | null, limit: number, newLimit: number) => typedError<DrillItem[], string>(__TAURI_INVOKE("repertoire_due", { color, limit, newLimit })),
-	repertoireGrade: (color: Side, key: string, grade: Grade) => typedError<CardState, string>(__TAURI_INVOKE("repertoire_grade", { color, key, grade })),
-	puzzlesInfo: () => typedError<PuzzleInfo, string>(__TAURI_INVOKE("puzzles_info")),
+	repertoireDue: (color: "white" | "black" | null, limit: number, newLimit: number) => typedError<DrillItem[], ErrorPayload>(__TAURI_INVOKE("repertoire_due", { color, limit, newLimit })),
+	repertoireGrade: (color: Side, key: string, grade: Grade) => typedError<CardState, ErrorPayload>(__TAURI_INVOKE("repertoire_grade", { color, key, grade })),
+	puzzlesInfo: () => typedError<PuzzleInfo, ErrorPayload>(__TAURI_INVOKE("puzzles_info")),
 	/**
 	 *  Download the Lichess puzzle database and import it. With `filter` set,
 	 *  only well-tested, popular puzzles are kept (a third of the database).
@@ -103,8 +192,8 @@ export const commands = {
 	minPopularity: number,
 	minPlays: number,
 	maxDeviation: number,
-} | null) => typedError<number, string>(__TAURI_INVOKE("puzzles_download", { filter })),
-	puzzlesThemes: () => typedError<ThemeCount[], string>(__TAURI_INVOKE("puzzles_themes")),
+} | null) => typedError<number, ErrorPayload>(__TAURI_INVOKE("puzzles_download", { filter })),
+	puzzlesThemes: () => typedError<ThemeCount[], ErrorPayload>(__TAURI_INVOKE("puzzles_themes")),
 	/**  The next puzzle near the user's rating (or `rating` if given). */
 	puzzleNext: (theme: string | null, rating: number | null) => typedError<{
 	id: string,
@@ -119,25 +208,86 @@ export const commands = {
 	themes: string[],
 	gameUrl: string | null,
 	opening: string | null,
-} | null, string>(__TAURI_INVOKE("puzzle_next", { theme, rating })),
-	puzzleCheck: (puzzleId: string, index: number, uci: string) => typedError<MoveVerdict, string>(__TAURI_INVOKE("puzzle_check", { puzzleId, index, uci })),
+} | null, ErrorPayload>(__TAURI_INVOKE("puzzle_next", { theme, rating })),
+	puzzleCheck: (puzzleId: string, index: number, uci: string) => typedError<MoveVerdict, ErrorPayload>(__TAURI_INVOKE("puzzle_check", { puzzleId, index, uci })),
 	/**  Record the outcome of a puzzle and update the puzzle rating. */
-	puzzleFinish: (puzzleId: string, solved: boolean) => typedError<PuzzleResult, string>(__TAURI_INVOKE("puzzle_finish", { puzzleId, solved })),
-	progressSummary: () => typedError<ProgressSummary, string>(__TAURI_INVOKE("progress_summary")),
+	puzzleFinish: (puzzleId: string, solved: boolean) => typedError<PuzzleResult, ErrorPayload>(__TAURI_INVOKE("puzzle_finish", { puzzleId, solved })),
+	progressSummary: () => typedError<ProgressSummary, ErrorPayload>(__TAURI_INVOKE("progress_summary")),
+	/**  Turn the user's mistakes in a reviewed game into practice cards. */
+	mistakesAdd: (gameId: number | null, review: ReviewResult, user: Side) => typedError<number, ErrorPayload>(__TAURI_INVOKE("mistakes_add", { gameId, review, user })),
+	mistakesDue: (limit: number) => typedError<MistakeCard[], ErrorPayload>(__TAURI_INVOKE("mistakes_due", { limit })),
+	mistakesStats: () => typedError<MistakeStats, ErrorPayload>(__TAURI_INVOKE("mistakes_stats")),
+	mistakesGrade: (id: number, grade: Grade) => typedError<CardState, ErrorPayload>(__TAURI_INVOKE("mistakes_grade", { id, grade })),
+	mistakesRemove: (id: number) => typedError<null, ErrorPayload>(__TAURI_INVOKE("mistakes_remove", { id })),
 };
 
 /** Events */
 export const events = {
 	analysisEvent: makeEvent<AnalysisEvent>("analysis-event"),
+	coachEvent: makeEvent<CoachEvent>("coach-event"),
 	downloadProgress: makeEvent<DownloadProgress>("download-progress"),
 	importProgress: makeEvent<ImportProgress>("import-progress"),
 	menuAction: makeEvent<MenuAction>("menu-action"),
 	playClock: makeEvent<PlayClock>("play-clock"),
 	playUpdate: makeEvent<PlayUpdate>("play-update"),
 	reviewProgress: makeEvent<ReviewProgress>("review-progress"),
+	settingsChanged: makeEvent<SettingsChanged>("settings-changed"),
+	voiceLevel: makeEvent<VoiceLevel>("voice-level"),
 };
 
 /* Types */
+/**  What the saved key may spend. */
+export type AiKeyInfo = {
+	label: string | null,
+	/**  Credits used so far. */
+	usage: number | null,
+	/**  Spending limit, if one is set. */
+	limit: number | null,
+	isFreeTier: boolean,
+};
+
+/**  A model from the catalogue, for the Settings pickers. */
+export type AiModel = {
+	id: string,
+	name: string,
+	/**  US dollars per input token / unit (as OpenRouter reports it). */
+	promptPrice: number | null,
+	completionPrice: number | null,
+	contextLength: number | null,
+};
+
+/**
+ *  OpenRouter model ids. Defaults are checked against OpenRouter's catalog;
+ *  the Settings screen lists what is currently available.
+ */
+export type AiSettings = {
+	/**
+	 *  Use OpenRouter for the coach's words and for voice input. Off until a
+	 *  key is saved; the coach falls back to built-in explanations.
+	 */
+	enabled?: boolean,
+	/**  Short narration of lines on the board (fast and cheap). */
+	narrateModel?: string,
+	/**  Answers to questions and longer explanations. */
+	explainModel?: string,
+	/**  Speech-to-text for voice input. */
+	sttModel?: string,
+	/**  Text-to-speech for the cloud voice. */
+	ttsModel?: string,
+	ttsVoice?: string,
+};
+
+export type AiUsageSummary = {
+	requests: number,
+	tokensIn: number | null,
+	tokensOut: number | null,
+	/**
+	 *  Credits (US dollars) OpenRouter reported; requests without a reported
+	 *  cost aren't included.
+	 */
+	cost: number | null,
+};
+
 /**  New lines from a live-analysis engine. */
 export type AnalysisEvent = AnalysisUpdate;
 
@@ -177,6 +327,8 @@ export type AnalysisUpdate = {
 	lines: AnalysisLine[],
 	/**  True once the search has stopped. */
 	done: boolean,
+	/**  Why the search stopped early, if it failed. */
+	error: string | null,
 };
 
 export type AppInfo = {
@@ -194,6 +346,17 @@ export type AppliedMove = {
 	uci: string,
 	san: string,
 	position: PositionInfo,
+};
+
+/**  What the coach knows about the board when asked. */
+export type AskContext = {
+	fen: string,
+	/**  Recent moves of the game, in SAN, oldest first. */
+	recentMoves: string[],
+	/**  e.g. "Tal vs Botvinnik, World Championship 1960" or "your game". */
+	game: string | null,
+	/**  The player the user is studying (Masters). */
+	player: string | null,
 };
 
 export type BackendResult = {
@@ -220,6 +383,13 @@ export type CardState = {
 	lastReview: number | null,
 };
 
+/**  One earlier turn of the conversation. */
+export type ChatTurn = {
+	/**  "user" or "coach". */
+	from: string,
+	text: string,
+};
+
 export type ClockState = {
 	whiteMs: number | null,
 	blackMs: number | null,
@@ -231,7 +401,105 @@ export type ClockTick = {
 	clock: ClockState,
 };
 
+/**  Progress of an "Ask the coach" answer, by request id. */
+export type CoachEvent = {
+	requestId: string,
+	kind: CoachEventKind,
+};
+
+export type CoachEventKind = 
+/**  More of the answer's text. */
+{ type: "delta"; text: string } | 
+/**  The coach is looking something up ("analyse_position", ...). */
+{ type: "tool"; name: string } | 
+/**  A line to play on the board. */
+{ type: "script"; script: CoachScript };
+
+/**  A coach as listed in the UI. */
+export type CoachInfo = {
+	id: string,
+	name: string,
+	tagline: string,
+	/**  Its engine is installed (Stockfish needs a download). */
+	available: boolean,
+	/**  This is the coach used when none is chosen explicitly. */
+	default: boolean,
+};
+
+export type CoachScript = {
+	id: string,
+	coachId: string,
+	title: string,
+	startFen: string,
+	startLastMove: string | null,
+	/**  Where the board goes when the script ends or is stopped. */
+	returnFen: string,
+	returnLastMove: string | null,
+	steps: CoachStep[],
+	/**  True when an AI model wrote the words (false: built-in templates). */
+	aiNarrated: boolean,
+	/**  Something the user should know, e.g. why AI narration wasn't used. */
+	notice: string | null,
+};
+
+export type CoachSettings = {
+	/**  "stockfish" or "leela"; `None` picks Stockfish when installed. */
+	coachId?: string | null,
+	verbosity?: Verbosity,
+	voiceOutput?: VoiceOutput,
+	/**  Name of the system voice; `None` uses the default voice. */
+	systemVoice?: string | null,
+	/**  Speaking speed, 0.5..2.0. */
+	speechRate?: number | null,
+	/**  Say the opponent's moves out loud in games. */
+	announceMoves?: boolean,
+	/**  The language the coach speaks and writes, e.g. "English". */
+	language?: string,
+};
+
+export type CoachShape = {
+	orig: string,
+	/**  Arrow end; `None` draws a circle on `orig`. */
+	dest: string | null,
+	/**  "green", "red", "blue", "yellow" (chessground brushes). */
+	brush: string,
+};
+
+export type CoachStep = 
+/**  Speak (and caption) a line. */
+{ type: "say"; id: string; role: SayRole; text: string } | 
+/**  Play a move with animation. */
+{ type: "move"; uci: string; san: string; fen: string } | 
+/**  Take the last move back with animation. */
+{ type: "back"; fen: string; lastMove: string | null } | 
+/**  Show a position directly (jumping between moments, or restoring). */
+{ type: "reset"; fen: string; lastMove: string | null } | 
+/**  Replace the arrows and circles. */
+{ type: "shapes"; shapes: CoachShape[] } | { type: "pause"; ms: number };
+
+/**
+ *  The coach's verdict on a move just played (coach mode in games,
+ *  puzzles), with a demonstration when it was a mistake.
+ */
+export type CoachVerdict = {
+	class: MoveClass,
+	winBefore: number | null,
+	winAfter: number | null,
+	bestSan: string | null,
+	/**  Present for inaccuracies, mistakes and blunders (or always, with `always_explain`). */
+	script: CoachScript | null,
+};
+
 export type ColorScheme = "auto" | "dark" | "light";
+
+export type ColorStats = {
+	games: number,
+	wins: number,
+	draws: number,
+	losses: number,
+	/**  Points per game for the master, 0..100. */
+	score: number | null,
+};
 
 export type DbGame = {
 	row: GameRow,
@@ -240,10 +508,13 @@ export type DbGame = {
 };
 
 export type DbStats = {
+	/**  Games in the user's database (master games not included). */
 	games: number,
 	mine: number,
 	reviewed: number,
 	sources: ([string, number])[],
+	/**  Games in the masters library. */
+	masters: number,
 };
 
 export type DownloadProgress = {
@@ -288,9 +559,33 @@ export type EngineKind =
 /**  Any other UCI engine on disk. */
 "uci";
 
+/**
+ *  What kind of failure a command hit, so the UI can offer the right action
+ *  (for example "Open AI settings" for [`ErrorKind::NoApiKey`]).
+ */
+export type ErrorKind = "chess" | "engine" | "notFound" | "io" | "network" | "db" | "data" | "app" | "noApiKey" | "aiQuota" | "ai" | "cancelled" | "other";
+
+/**  How an [`Error`] looks in TypeScript. */
+export type ErrorPayload = {
+	kind: ErrorKind,
+	message: string,
+};
+
 export type ExpectedMove = {
 	uci: string,
 	san: string,
+};
+
+export type ExplainMoveRequest = {
+	fenBefore: string,
+	lastMoveBefore: string | null,
+	/**  The move to explain (UCI). */
+	played: string,
+	known: KnownMove | null,
+	/**  Where the board goes afterwards; defaults to the position after the move. */
+	returnFen: string | null,
+	returnLastMove: string | null,
+	coachId: string | null,
 };
 
 export type ExplorerFilter = {
@@ -298,11 +593,16 @@ export type ExplorerFilter = {
 	onlyMine?: boolean,
 	/**  Only games where the user had this colour. */
 	color?: Side | null,
+	/**  Only games of this master (catalogue id), from the masters library. */
+	subject?: string | null,
+	/**  With `subject`: only games where the master had this colour. */
+	subjectColor?: Side | null,
 };
 
 export type ExplorerMove = {
 	uci: string,
 	san: string,
+	/**  Counts are u64: the Lichess database has more games than fit in a u32. */
 	games: number,
 	white: number,
 	draws: number,
@@ -364,6 +664,14 @@ export type GameQuery = {
 	minRating?: number | null,
 	maxRating?: number | null,
 	position?: PositionQuery | null,
+	/**  "mine" (default) or "masters". */
+	collection?: string | null,
+	/**  Only games of this master (a catalogue file id like "Carlsen"). */
+	subject?: string | null,
+	/**  With `subject`: only games where the master had this colour. */
+	subjectColor?: Side | null,
+	/**  With `subject`: only games the master won / lost / drew. */
+	subjectOutcome?: UserOutcome | null,
 	sort?: SortColumn | null,
 	desc?: boolean,
 	offset?: number,
@@ -402,6 +710,22 @@ export type Grade =
 /**  Right, but only after a wrong try or a long think. */
 "hard" | "good" | "easy";
 
+/**  The score for one guess in "Guess the move". */
+export type GuessResult = {
+	/**  3 for the master's move, 2 for an equally good one, 0 otherwise. */
+	points: number,
+	verdict: GuessVerdict,
+	guessSan: string,
+	masterSan: string,
+	/**  Mover's win% after the guess and after the master's move. */
+	guessWin: number | null,
+	masterWin: number | null,
+	/**  A demonstration, when the guess wasn't the master's move. */
+	script: CoachScript | null,
+};
+
+export type GuessVerdict = "exact" | "alsoGood" | "miss";
+
 /**  Progress of a database import. */
 export type ImportProgress = {
 	jobId: string,
@@ -420,6 +744,22 @@ export type ImportSummary = {
 	errors: string[],
 	/**  Newest game time seen, used for incremental account sync. */
 	newest: number | null,
+};
+
+/**  Review data for a move, when the game has been reviewed (saves engine time). */
+export type KnownMove = {
+	bestLine: string[],
+	replyLine: string[],
+	winBefore: number | null,
+	winAfter: number | null,
+	class: MoveClass,
+};
+
+/**  A bundled legend game, for the Legends list. */
+export type LegendGame = {
+	game: GameRow,
+	title: string,
+	why: string,
 };
 
 export type LevelResult = {
@@ -442,8 +782,57 @@ export type LevelSeries = {
 	points: RatingPoint[],
 };
 
+export type MasterMoveStat = {
+	san: string,
+	games: number,
+	score: number | null,
+};
+
+export type MasterOpeningStat = {
+	eco: string | null,
+	name: string,
+	games: number,
+	score: number | null,
+};
+
+/**  A master in the catalogue, with what is in the local library. */
+export type MasterPlayer = {
+	/**  Catalogue id, e.g. "Carlsen". */
+	id: string,
+	name: string,
+	/**  Games in the PGN Mentor file. */
+	gamesAvailable: number,
+	/**  Games of this player in the local library. */
+	gamesInLibrary: number,
+};
+
 /**  A native menu item was chosen, e.g. "new_game" or "open_pgn". */
 export type MenuAction = string;
+
+export type MistakeCard = {
+	id: number,
+	gameId: number | null,
+	/**  The position before the mistake; the user is to move. */
+	fen: string,
+	side: Side,
+	played: string,
+	playedSan: string,
+	best: string,
+	bestSan: string,
+	/**  The better line, in SAN (first = best move). */
+	bestLine: string[],
+	/**  What punishes the mistake, in SAN. */
+	refutation: string[],
+	winBefore: number | null,
+	winAfter: number | null,
+	due: number | null,
+	reps: number,
+};
+
+export type MistakeStats = {
+	total: number,
+	due: number,
+};
 
 export type MoveCheck = {
 	/**  Mover's win% after the move (0..100). */
@@ -528,6 +917,12 @@ export type OpponentLevel = {
 	elo: number | null,
 };
 
+export type OpponentStat = {
+	name: string,
+	games: number,
+	score: number | null,
+};
+
 export type OptionKind = { type: "check"; default: boolean } | 
 /**  Numbers as f64: TypeScript has no 64-bit integers. */
 { type: "spin"; default: number | null; min: number | null; max: number | null } | { type: "combo"; default: string; vars: string[] } | { type: "button" } | { type: "string"; default: string };
@@ -562,6 +957,8 @@ export type PlaySetup = {
 
 export type PlaySnapshot = {
 	sessionId: number,
+	/**  Increases with every change, so the UI can ignore out-of-order snapshots. */
+	seq: number,
 	setup: PlaySetup,
 	level: OpponentLevel,
 	network: string,
@@ -593,6 +990,32 @@ export type PlayedMove = {
 	/**  Mover's clock after the move (with increment), if the game is timed. */
 	clockMs: number | null,
 	thinkMs: number | null,
+};
+
+export type PlayerStats = {
+	id: string,
+	name: string,
+	games: number,
+	firstYear: number | null,
+	lastYear: number | null,
+	asWhite: ColorStats,
+	asBlack: ColorStats,
+	openingsWhite: MasterOpeningStat[],
+	openingsBlack: MasterOpeningStat[],
+	/**  First moves with White. */
+	firstMoves: MasterMoveStat[],
+	/**  Replies with Black to 1.e4 and to 1.d4. */
+	vsE4: MasterMoveStat[],
+	vsD4: MasterMoveStat[],
+	averageMoves: number | null,
+	/**  Share of decisive games, 0..100. */
+	decisive: number | null,
+	topOpponents: OpponentStat[],
+	/**  (decade, games), e.g. (1950, 120). */
+	decades: ([number, number])[],
+	style: StyleMetrics | null,
+	/**  The coach's write-up of the player's style, when generated. */
+	report: string | null,
 };
 
 /**  Engine verdict on one position, White's point of view. */
@@ -727,6 +1150,9 @@ export type ReviewResult = {
 	keyMoments: number[],
 };
 
+/**  What a spoken line is about; the narrator uses it to write the text. */
+export type SayRole = "intro" | "played" | "refutation" | "consequence" | "better" | "betterLine" | "summary" | "idea" | "moment";
+
 export type Score = 
 /**
  *  Centipawns from the side to move's point of view. lc0's default
@@ -766,7 +1192,19 @@ export type Settings = {
 	lichessUsername?: string | null,
 	chesscomUsername?: string | null,
 	onboardingDone?: boolean,
+	/**  Engine for game reviews; `None` picks Stockfish when installed, else lc0. */
+	reviewEngineId?: string | null,
+	/**  The talking coach. */
+	coach?: CoachSettings,
+	/**  AI models used through OpenRouter (the key itself is in the keychain). */
+	ai?: AiSettings,
 };
+
+/**
+ *  The backend changed settings on its own (e.g. picked a default network
+ *  after a download); the UI replaces its copy.
+ */
+export type SettingsChanged = Settings;
 
 export type Side = "white" | "black";
 
@@ -784,6 +1222,23 @@ export type SideSummary = {
 };
 
 export type SortColumn = "date" | "white" | "black" | "whiteElo" | "blackElo" | "result" | "eco" | "moves";
+
+/**  Measured by the coach's engine over a sample of games. */
+export type StyleMetrics = {
+	gamesAnalysed: number,
+	/**  Average move accuracy (0..100), Lichess-style. */
+	accuracy: number | null,
+	/**  Average change in winning chances per move: high means sharp games. */
+	sharpness: number | null,
+	/**  Brilliant moves (sound sacrifices) per game. */
+	sacrificesPerGame: number | null,
+	/**  "Only moves" found (great moves) per game. */
+	greatPerGame: number | null,
+	mistakesPerGame: number | null,
+	blundersPerGame: number | null,
+	/**  Engine (coach) used. */
+	engine: string,
+};
 
 export type ThemeCount = {
 	theme: string,
@@ -830,6 +1285,41 @@ export type UciOption = {
 };
 
 export type UserOutcome = "win" | "loss" | "draw";
+
+export type Verbosity = "brief" | "normal" | "detailed";
+
+export type VoiceCommand = "takeBack" | "hint" | "flip" | "resign" | "offerDraw" | "bestMove" | "repeat" | "stop" | "next" | "previous" | "explain";
+
+export type VoiceIntent = { type: "move"; uci: string; san: string } | 
+/**  Several legal moves fit; ask which one. */
+{ type: "ambiguous"; options: string[] } | { type: "command"; command: VoiceCommand } | 
+/**  Anything else: a question for the coach. */
+{ type: "question"; text: string } | 
+/**  Sounded like a move, but no legal move matches. */
+{ type: "noMatch"; heard: string } | { type: "empty" };
+
+/**  Microphone input level (0..1) while listening. */
+export type VoiceLevel = number | null;
+
+export type VoiceOutput = 
+/**  The computer's own voices: free and offline. */
+"system" | 
+/**  A neural voice from OpenRouter (needs a key; costs a little per use). */
+"cloud" | 
+/**  Captions only. */
+"off";
+
+export type VoiceResult = {
+	transcript: string,
+	intent: VoiceIntent,
+};
+
+export type WalkthroughRequest = {
+	gameId: number,
+	/**  The master to follow (catalogue id); their moves are the focus. */
+	subject: string | null,
+	coachId: string | null,
+};
 
 /**  Win/draw/loss in per mille (W + D + L = 1000) from the side to move. */
 export type Wdl = {

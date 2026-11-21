@@ -22,9 +22,9 @@ struct ApiMove {
     san: String,
     #[serde(rename = "averageRating")]
     average_rating: Option<f64>,
-    white: u32,
-    draws: u32,
-    black: u32,
+    white: u64,
+    draws: u64,
+    black: u64,
 }
 
 #[derive(Deserialize)]
@@ -35,9 +35,9 @@ struct ApiOpening {
 
 #[derive(Deserialize)]
 struct ApiResponse {
-    white: u32,
-    draws: u32,
-    black: u32,
+    white: u64,
+    draws: u64,
+    black: u64,
     moves: Vec<ApiMove>,
     opening: Option<ApiOpening>,
 }

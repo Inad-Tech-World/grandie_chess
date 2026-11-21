@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Alert, Button, Group, Modal, Progress, Stack, Tabs, Text, TextInput } from "@mantine/core";
 import { IconChessQueen, IconChessKnight, IconFileImport } from "@tabler/icons-react";
 import { open } from "@tauri-apps/plugin-dialog";
-import { commands, events, unwrap, type ImportProgress, type ImportSummary } from "../lib/api";
+import { commands, errorMessage, events, unwrap, type ImportProgress, type ImportSummary } from "../lib/api";
 import { formatBytes } from "../lib/format";
 import { newId } from "../stores/app";
 import { useSettings } from "../stores/settings";
@@ -30,20 +30,16 @@ export function ImportModal({ opened, onClose, onImported }: Props) {
     setChesscom(settings.chesscomUsername ?? "");
   }, [settings.lichessUsername, settings.chesscomUsername]);
 
-  useEffect(() => {
-    if (!job) return;
-    const unlisten = events.importProgress.listen((e) => {
-      if (e.payload.jobId === job) setProgress(e.payload);
-    });
-    return () => void unlisten.then((f) => f());
-  }, [job]);
-
   async function run(source: Source) {
     const jobId = newId("import");
     setJob(jobId);
     setProgress(null);
     setResult(null);
     setError(null);
+    // Listen before the import starts, so its first progress events aren't missed.
+    const unlisten = await events.importProgress.listen((e) => {
+      if (e.payload.jobId === jobId) setProgress(e.payload);
+    });
     try {
       let summary: ImportSummary;
       if (source === "files") {
@@ -63,8 +59,9 @@ export function ImportModal({ opened, onClose, onImported }: Props) {
       setResult(summary);
       onImported();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorMessage(e));
     } finally {
+      unlisten();
       setJob(null);
     }
   }

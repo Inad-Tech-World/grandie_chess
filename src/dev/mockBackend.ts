@@ -12,6 +12,8 @@ import { makeFen, parseFen } from "chessops/fen";
 import { makeSan } from "chessops/san";
 import { makeUci, parseUci, squareFile } from "chessops/util";
 import levelsJson from "../../src-tauri/resources/levels.json";
+import { installFeatureMocks } from "./mocks";
+import { masterGameById, masterQuery } from "./mocks/masters";
 import networksJson from "../../src-tauri/resources/networks.json";
 import type {
   AnalysisRequest,
@@ -32,6 +34,29 @@ import type {
 } from "../bindings";
 
 const START = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+
+type ErrorKind = import("../bindings").ErrorKind;
+type ErrorPayload = import("../bindings").ErrorPayload;
+
+/** A command error shaped like the Rust one (`{ kind, message }`). */
+function appError(kind: ErrorKind, message: string): ErrorPayload {
+  return { kind, message };
+}
+
+/** Turn anything a handler throws into an `ErrorPayload`, so the generated
+ *  bindings return `{ status: "error" }` exactly as they do with Rust (they
+ *  re-throw `Error` instances, which the real backend never sends). */
+function toAppError(e: unknown): ErrorPayload {
+  if (typeof e === "object" && e !== null && "kind" in e && "message" in e) return e as ErrorPayload;
+  const message = e instanceof Error ? e.message : String(e);
+  if (/illegal move|bad move|not your turn|game is over|invalid|fen/i.test(message)) return appError("chess", message);
+  if (/no game with id|not found|token/i.test(message)) return appError("notFound", message);
+  return appError("other", message);
+}
+
+/** Counters and knobs the e2e tests read through `window.__GRANDIE_MOCK_STATS__`. */
+const mockStats = { reviewStarts: 0, reviewPlyMs: 15 };
+const runningReviews = new Map<string, { cancelled: boolean }>();
 
 function load(fen: string): Chess {
   return Chess.fromSetup(parseFen(fen).unwrap()).unwrap();
@@ -105,6 +130,7 @@ const levels: OpponentLevel[] = [
 ];
 
 const installed = new Set(["791556", "703810", "maia-1100", "maia-1300", "maia-1500", "maia-1700", "maia-1900"]);
+const MOCK_SETTINGS_KEY = "grandie-mock-settings";
 let settings: Settings = {
   playerName: "Tester",
   defaultNetwork: "791556",
@@ -123,7 +149,18 @@ let settings: Settings = {
   lichessUsername: null,
   chesscomUsername: null,
   onboardingDone: true,
+  // Saved settings survive a page reload within a test (e2e tests clear
+  // localStorage at the start, so each test begins with these defaults).
+  ...readMockSettings(),
 };
+
+function readMockSettings(): Partial<Settings> {
+  try {
+    return JSON.parse(localStorage.getItem(MOCK_SETTINGS_KEY) ?? "{}") as Partial<Settings>;
+  } catch {
+    return {};
+  }
+}
 
 // ---- play sessions ----
 
@@ -140,6 +177,12 @@ function clockState(s: MockSession): ClockState | null {
   const now = Date.now();
   const spent = (side: Side) => (s.clock!.running === side ? now - s.clock!.since : 0);
   return { whiteMs: Math.max(0, s.clock.white - spent("white")), blackMs: Math.max(0, s.clock.black - spent("black")), running: s.clock.running };
+}
+
+/** Emit a play update with a fresh sequence number, as the Rust session does. */
+function emitPlay(s: MockSession) {
+  s.snap = { ...s.snap, seq: s.snap.seq + 1 };
+  void emit("play-update", s.snap);
 }
 
 function refresh(s: MockSession) {
@@ -191,12 +234,12 @@ function engineTurn(s: MockSession) {
   if (s.snap.outcome || s.snap.position.turn === s.snap.userSide) return;
   s.snap = { ...s.snap, engineThinking: true };
   refresh(s);
-  void emit("play-update", s.snap);
+  emitPlay(s);
   setTimeout(() => {
     if (s.snap.outcome) return;
     s.snap = { ...s.snap, engineThinking: false };
     pushMove(s, firstMove(s.snap.position.fen));
-    void emit("play-update", s.snap);
+    emitPlay(s);
   }, 150);
 }
 
@@ -208,6 +251,7 @@ function startGame(setup: PlaySetup): PlaySnapshot {
   const s: MockSession = {
     snap: {
       sessionId: nextSession++,
+      seq: 0,
       setup,
       level,
       network: level.network ?? "791556",
@@ -278,7 +322,7 @@ function parsePgn(text: string): { games: GameTree[]; errors: string[] } {
   return { games: [tree], errors: [] };
 }
 
-type Handler = (args: Record<string, unknown>) => unknown;
+export type Handler = (args: Record<string, unknown>) => unknown;
 
 const handlers: Record<string, Handler> = {
   app_info: () => ({ version: "0.1.0", arch: "x86_64", lc0Path: "/mock/lc0", dataDir: "/mock", networksDir: "/mock/networks", pgnDir: "/mock/pgn" }),
@@ -287,6 +331,11 @@ const handlers: Record<string, Handler> = {
   settings_get: () => settings,
   settings_set: (a) => {
     settings = a.settings as Settings;
+    try {
+      localStorage.setItem(MOCK_SETTINGS_KEY, JSON.stringify(settings));
+    } catch {
+      // Private mode: settings just don't survive a reload.
+    }
     return null;
   },
   networks_list: () =>
@@ -322,7 +371,7 @@ const handlers: Record<string, Handler> = {
     if (s.snap.outcome) throw "the game is over";
     if (s.snap.position.turn !== s.snap.userSide || s.snap.engineThinking) throw "it is not your turn";
     pushMove(s, a.uci as string);
-    void emit("play-update", s.snap);
+    emitPlay(s);
     engineTurn(s);
     return s.snap;
   },
@@ -337,7 +386,7 @@ const handlers: Record<string, Handler> = {
     const s = session(a.sessionId as number);
     const winner: Side = s.snap.userSide === "white" ? "black" : "white";
     finish(s, { result: winner === "white" ? "1-0" : "0-1", winner, reason: "resignation" });
-    void emit("play-update", s.snap);
+    emitPlay(s);
     return s.snap;
   },
   play_offer_draw: () => false,
@@ -345,7 +394,7 @@ const handlers: Record<string, Handler> = {
     const s = session(a.sessionId as number);
     const best = firstMove(s.snap.position.fen);
     s.snap = { ...s.snap, hint: best };
-    void emit("play-update", s.snap);
+    emitPlay(s);
     return best;
   },
   play_pgn: (a) => gamePgn(session(a.sessionId as number)),
@@ -503,14 +552,28 @@ Object.assign(handlers, {
   },
   analysis_backend: () => "metal (Mock GPU)",
   review_start: async (a: Record<string, unknown>) => {
-    const moves = a.moves as string[];
-    for (let i = 0; i <= moves.length; i++) {
-      await emit("review-progress", { reviewId: a.reviewId, done: i + 1, total: moves.length + 1 });
-      await new Promise((r) => setTimeout(r, 15));
+    const id = a.reviewId as string;
+    // Like the Rust backend: one review per id, and cancellable at any point.
+    if (runningReviews.has(id)) throw appError("other", "this game is already being reviewed");
+    runningReviews.set(id, { cancelled: false });
+    mockStats.reviewStarts++;
+    try {
+      const moves = a.moves as string[];
+      for (let i = 0; i <= moves.length; i++) {
+        if (runningReviews.get(id)?.cancelled) throw appError("cancelled", "cancelled");
+        await emit("review-progress", { reviewId: id, done: i + 1, total: moves.length + 1 });
+        await new Promise((r) => setTimeout(r, mockStats.reviewPlyMs));
+      }
+      return mockReview(a.startFen as string, moves);
+    } finally {
+      runningReviews.delete(id);
     }
-    return mockReview(a.startFen as string, moves);
   },
-  review_cancel: () => null,
+  review_cancel: (a: Record<string, unknown>) => {
+    const job = runningReviews.get(a.reviewId as string);
+    if (job) job.cancelled = true;
+    return null;
+  },
   review_check_move: (a: Record<string, unknown>) => {
     const applied = apply(a.fen as string, a.uci as string);
     const good = (a.uci as string) === mockBest(a.fen as string);
@@ -581,6 +644,8 @@ Object.assign(handlers, {
   }),
   db_query: (a: Record<string, unknown>) => {
     const q = a.query as import("../bindings").GameQuery;
+    // A master's games live in the masters library (see mocks/masters.ts).
+    if (q.subject) return masterQuery(q);
     const text = q.text?.toLowerCase();
     const sameBoard = (f: string, g: string) => f.split(" ").slice(0, 2).join(" ") === g.split(" ").slice(0, 2).join(" ");
     let rows = dbGames.filter((g) => {
@@ -601,9 +666,9 @@ Object.assign(handlers, {
     return { total: rows.length, rows: rows.slice(q.offset ?? 0, (q.offset ?? 0) + (q.limit || 200)), elapsedMs: 3 };
   },
   db_game: (a: Record<string, unknown>) => {
-    const g = dbGames.find((d) => d.row.id === a.id);
+    const g = dbGames.find((d) => d.row.id === a.id) ?? masterGameById(a.id as number);
     if (!g) throw "game not found";
-    return { row: g.row, tree: parsePgn(g.pgn).games[0], review: g.review };
+    return { row: g.row, tree: parsePgn(g.pgn).games[0], review: "review" in g ? g.review : null };
   },
   db_delete: (a: Record<string, unknown>) => {
     const ids = a.ids as number[];
@@ -849,12 +914,17 @@ export function registerMock(name: string, handler: Handler) {
 
 export function installMockBackend() {
   mockWindows("main");
+  installFeatureMocks(registerMock, { emit, apply, info, load });
   mockIPC(
     async (cmd, payload) => {
       if (cmd.startsWith("plugin:")) return null;
       const handler = handlers[cmd];
-      if (!handler) throw `mock backend has no command ${cmd}`;
-      return handler((payload ?? {}) as Record<string, unknown>);
+      if (!handler) throw appError("other", `mock backend has no command ${cmd}`);
+      try {
+        return await handler((payload ?? {}) as Record<string, unknown>);
+      } catch (e) {
+        throw toAppError(e);
+      }
     },
     { shouldMockEvents: true },
   );
@@ -866,4 +936,5 @@ export function installMockBackend() {
     }
   }, 100);
   (window as unknown as { __GRANDIE_MOCK__: boolean }).__GRANDIE_MOCK__ = true;
+  (window as unknown as { __GRANDIE_MOCK_STATS__: typeof mockStats }).__GRANDIE_MOCK_STATS__ = mockStats;
 }

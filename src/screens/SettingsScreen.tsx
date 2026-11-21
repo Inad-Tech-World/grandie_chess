@@ -2,9 +2,11 @@ import { useEffect, useState } from "react";
 import { Anchor, Badge, Button, Card, Group, PasswordInput, SegmentedControl, Slider, Stack, Switch, Text, TextInput, Title } from "@mantine/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { notifications } from "@mantine/notifications";
-import { commands, tryCommand, type AppInfo } from "../lib/api";
+import { commands, notifyError, tryCommand, type AppInfo } from "../lib/api";
 import { useSettings } from "../stores/settings";
 import { credentialStore } from "../lib/platform";
+import { useDebouncedField } from "../lib/useDebouncedField";
+import { AiCoachSettings } from "../settings/AiCoachSettings";
 
 const BOARD_THEMES = [
   { id: "brown", label: "Brown", light: "#f0d9b5", dark: "#b58863" },
@@ -23,8 +25,18 @@ export function SettingsScreen() {
   const [info, setInfo] = useState<AppInfo | null>(null);
   const [hasToken, setHasToken] = useState(false);
   const [token, setToken] = useState("");
+  // Typing and dragging save once the user pauses, not on every keystroke.
+  const [playerName, setPlayerName] = useDebouncedField(settings.playerName, (v) => void update({ playerName: v }));
+  const [lichessName, setLichessName] = useDebouncedField(settings.lichessUsername ?? "", (v) => void update({ lichessUsername: v || null }));
+  const [chesscomName, setChesscomName] = useDebouncedField(settings.chesscomUsername ?? "", (v) => void update({ chesscomUsername: v || null }));
+  const [animationMs, setAnimationMs] = useState(settings.animationMs);
+  useEffect(() => setAnimationMs(settings.animationMs), [settings.animationMs]);
+
   useEffect(() => {
-    void commands.appInfo().then(setInfo);
+    commands
+      .appInfo()
+      .then(setInfo)
+      .catch((e) => notifyError("Could not read the app details", e));
     void commands.lichessTokenStatus().then((r) => r.status === "ok" && setHasToken(r.data));
   }, []);
 
@@ -49,8 +61,8 @@ export function SettingsScreen() {
           <TextInput
             label="Your name"
             description="Used in saved games."
-            value={settings.playerName}
-            onChange={(e) => void update({ playerName: e.currentTarget.value })}
+            value={playerName}
+            onChange={(e) => setPlayerName(e.currentTarget.value)}
           />
         </Card>
 
@@ -84,8 +96,9 @@ export function SettingsScreen() {
             min={0}
             max={500}
             step={50}
-            value={settings.animationMs}
-            onChange={(v) => void update({ animationMs: v })}
+            value={animationMs}
+            onChange={setAnimationMs}
+            onChangeEnd={(v) => void update({ animationMs: v })}
             marks={[
               { value: 0, label: "Off" },
               { value: 200, label: "Normal" },
@@ -161,6 +174,8 @@ export function SettingsScreen() {
           </Stack>
         </Card>
 
+        <AiCoachSettings />
+
         <Card withBorder radius="lg" padding="lg">
           <Group justify="space-between" mb="sm">
             <Text fw={600}>Accounts</Text>
@@ -174,13 +189,13 @@ export function SettingsScreen() {
             <Group grow>
               <TextInput
                 label="Lichess username"
-                value={settings.lichessUsername ?? ""}
-                onChange={(e) => void update({ lichessUsername: e.currentTarget.value || null })}
+                value={lichessName}
+                onChange={(e) => setLichessName(e.currentTarget.value)}
               />
               <TextInput
                 label="Chess.com username"
-                value={settings.chesscomUsername ?? ""}
-                onChange={(e) => void update({ chesscomUsername: e.currentTarget.value || null })}
+                value={chesscomName}
+                onChange={(e) => setChesscomName(e.currentTarget.value)}
               />
             </Group>
             <Text size="xs" c="dimmed">

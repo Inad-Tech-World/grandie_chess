@@ -1,15 +1,18 @@
 import { useEffect, useState } from "react";
-import { Button, Group, Image, Modal, Progress, Stack, Stepper, Text, TextInput, Title } from "@mantine/core";
+import { Button, Checkbox, Group, Image, Modal, Progress, Stack, Stepper, Text, TextInput, Title } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { commands, notifyError, unwrap, type BackendResult } from "../lib/api";
 import { formatBytes } from "../lib/format";
 import { deviceName } from "../lib/platform";
 import { downloadFraction, useDownloads } from "../stores/downloads";
 import { useSettings } from "../stores/settings";
+import { useEngines } from "../stores/engines";
 
 /** Networks every new install needs: one full-strength net, the small net for
  *  weak Leela levels, and a spread of Maia levels. */
 const ESSENTIALS = ["791556", "703810", "maia-1100", "maia-1300", "maia-1500", "maia-1700", "maia-1900"];
+/** Size of the pinned Stockfish 19 download (see src-tauri/src/engine/install.rs). */
+const STOCKFISH_BYTES = 82_323_876;
 
 export function Onboarding() {
   const { settings, loaded, update, load } = useSettings();
@@ -20,27 +23,44 @@ export function Onboarding() {
   const [name, setName] = useState("");
   const [lichess, setLichess] = useState("");
   const [chesscom, setChesscom] = useState("");
+  const engines = useEngines((s) => s.engines);
+  const refreshEngines = useEngines((s) => s.refresh);
+  const [wantStockfish, setWantStockfish] = useState(true);
 
   useEffect(() => {
     void refresh();
-  }, [refresh]);
+    void refreshEngines().catch(() => {});
+  }, [refresh, refreshEngines]);
 
   const opened = loaded && !settings.onboardingDone;
   const essentials = networks.filter((n) => ESSENTIALS.includes(n.id));
   const missing = essentials.filter((n) => !n.installed);
-  const missingBytes = missing.reduce((s, n) => s + (n.size ?? 0), 0);
+  const stockfishInstalled = engines.some((e) => e.id === "stockfish");
+  const getStockfish = wantStockfish && !stockfishInstalled;
+  const missingBytes = missing.reduce((s, n) => s + (n.size ?? 0), 0) + (getStockfish ? STOCKFISH_BYTES : 0);
+  const nothingToDownload = missing.length === 0 && !getStockfish;
 
   async function downloadAll() {
     setBusy(true);
     try {
       for (const n of missing) await download(n.id);
       if (!settings.defaultNetwork) await update({ defaultNetwork: "791556" });
-      setStep(2);
     } catch (e) {
       notifyError("Download failed", e);
-    } finally {
       setBusy(false);
+      return;
     }
+    if (getStockfish) {
+      // Stockfish is optional: a failed download shouldn't stop the setup.
+      try {
+        await unwrap(commands.engineInstallStockfish());
+        await refreshEngines();
+      } catch (e) {
+        notifyError("Stockfish wasn't installed (you can add it later in Engines)", e);
+      }
+    }
+    setBusy(false);
+    setStep(2);
   }
 
   async function detect() {
@@ -81,7 +101,7 @@ export function Onboarding() {
     <Modal opened={opened} onClose={() => void finish()} size="lg" centered withCloseButton={false} closeOnClickOutside={false} radius="lg">
       <Stepper active={step} onStepClick={setStep} size="sm" mb="lg" allowNextStepsSelect={false}>
         <Stepper.Step label="Welcome" />
-        <Stepper.Step label="Networks" />
+        <Stepper.Step label="Engines & networks" />
         <Stepper.Step label={`Your ${deviceName}`} />
         <Stepper.Step label="You" />
       </Stepper>
@@ -102,8 +122,8 @@ export function Onboarding() {
       {step === 1 && (
         <Stack>
           <Text>
-            Grandie needs a few neural networks to play. They download once
-            {missing.length ? ` (${formatBytes(missingBytes)})` : ""}.
+            Grandie needs a few neural networks to play, and Stockfish to coach and review your games. They download once
+            {missingBytes ? ` (${formatBytes(missingBytes)})` : ""}.
           </Text>
           {essentials.map((n) => (
             <div key={n.id}>
@@ -116,8 +136,30 @@ export function Onboarding() {
               <Progress value={n.installed ? 100 : downloadFraction(progress[n.id]) * 100} size="xs" mt={4} color={n.installed ? "green" : undefined} />
             </div>
           ))}
+          <div>
+            <Group justify="space-between" align="flex-start" wrap="nowrap">
+              <Checkbox
+                label="Stockfish 19"
+                description="The default coach and review engine: fast on any computer."
+                checked={stockfishInstalled || wantStockfish}
+                disabled={stockfishInstalled || busy}
+                onChange={(e) => setWantStockfish(e.currentTarget.checked)}
+              />
+              <Text size="xs" c="dimmed" style={{ whiteSpace: "nowrap" }}>
+                {stockfishInstalled ? "Installed" : formatBytes(STOCKFISH_BYTES)}
+              </Text>
+            </Group>
+            {(stockfishInstalled || wantStockfish) && (
+              <Progress
+                value={stockfishInstalled ? 100 : downloadFraction(progress["stockfish"]) * 100}
+                size="xs"
+                mt={4}
+                color={stockfishInstalled ? "green" : undefined}
+              />
+            )}
+          </div>
           <Group justify="flex-end">
-            {missing.length === 0 ? (
+            {nothingToDownload ? (
               <Button onClick={() => setStep(2)}>Continue</Button>
             ) : (
               <Button loading={busy} onClick={() => void downloadAll()}>
@@ -165,6 +207,9 @@ export function Onboarding() {
           </Group>
           <Text size="xs" c="dimmed">
             With a username, Grandie imports your games so you can review them, find your weak openings and build your repertoire.
+          </Text>
+          <Text size="xs" c="dimmed">
+            Tip: add an OpenRouter key in Settings to let the coach explain in its own words and to talk to it.
           </Text>
           <Group justify="flex-end">
             <Button onClick={() => void finish()}>Start playing</Button>

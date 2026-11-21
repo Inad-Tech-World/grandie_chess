@@ -80,6 +80,9 @@ function useBackendEvents() {
       events.menuAction.listen((e) => handleMenu(e.payload)),
       events.analysisEvent.listen((e) => useEngines.getState().onUpdate(e.payload)),
       events.reviewProgress.listen((e) => useReviews.getState().set(e.payload.reviewId, e.payload.done, e.payload.total)),
+      // e.g. a default network picked after a download: take it, so the next
+      // settings save doesn't overwrite it with a stale copy.
+      events.settingsChanged.listen((e) => useSettings.getState().replace(e.payload)),
     ];
     return () => {
       unlisten.forEach((p) => void p.then((f) => f()));

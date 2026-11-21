@@ -34,6 +34,8 @@ export function fullFen(boardFen: string, turn: Side): string {
 interface BoardEditorProps {
   /** Initial piece placement (the first field of a FEN). */
   initialBoard: string;
+  /** Change it to put `initialBoard` back even when it is unchanged. */
+  resetToken?: number;
   size: number;
   turn: Side;
   onTurnChange: (turn: Side) => void;
@@ -43,7 +45,7 @@ interface BoardEditorProps {
 
 /** Free-placement board: drag pieces, drop them off to delete, or pick a
  *  piece from the palette and click squares to place it. */
-export function BoardEditor({ initialBoard, size, turn, onTurnChange, onChange }: BoardEditorProps) {
+export function BoardEditor({ initialBoard, resetToken, size, turn, onTurnChange, onChange }: BoardEditorProps) {
   const el = useRef<HTMLDivElement>(null);
   const api = useRef<Api | null>(null);
   const [brush, setBrush] = useState<Piece | "erase" | null>(null);
@@ -78,9 +80,11 @@ export function BoardEditor({ initialBoard, size, turn, onTurnChange, onChange }
   }, []);
 
   useEffect(() => {
-    api.current?.set({ fen: initialBoard });
-    api.current && onChangeRef.current(api.current.getFen());
-  }, [initialBoard]);
+    const cg = api.current;
+    if (!cg) return;
+    cg.set({ fen: initialBoard });
+    onChangeRef.current(cg.getFen());
+  }, [initialBoard, resetToken]);
 
   useEffect(() => {
     api.current?.redrawAll();

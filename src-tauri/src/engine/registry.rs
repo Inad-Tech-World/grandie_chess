@@ -42,6 +42,29 @@ pub struct EngineConfig {
     pub available_options: Vec<UciOption>,
 }
 
+/// How an engine is read from engines.json: fields added in later versions
+/// default, so older files keep loading. (Kept apart from [`EngineConfig`]
+/// so the TypeScript type stays non-optional.)
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct StoredEngine {
+    id: String,
+    name: String,
+    kind: EngineKind,
+    #[serde(default)]
+    path: Option<String>,
+    #[serde(default)]
+    options: Vec<OptionValue>,
+    #[serde(default)]
+    available_options: Vec<UciOption>,
+}
+
+impl From<StoredEngine> for EngineConfig {
+    fn from(e: StoredEngine) -> Self {
+        EngineConfig { id: e.id, name: e.name, kind: e.kind, path: e.path, options: e.options, available_options: e.available_options }
+    }
+}
+
 impl EngineConfig {
     pub fn lc0() -> Self {
         EngineConfig {
@@ -59,27 +82,60 @@ impl EngineConfig {
     }
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize)]
 struct EnginesFile {
     engines: Vec<EngineConfig>,
 }
 
+#[derive(Debug, Clone, Default, Deserialize)]
+struct StoredFile {
+    #[serde(default)]
+    engines: Vec<StoredEngine>,
+}
+
 pub struct Registry {
     path: PathBuf,
+    /// Serialises read-modify-write so concurrent changes aren't lost.
+    write_lock: std::sync::Mutex<()>,
 }
 
 impl Registry {
     pub fn new(data_dir: &Path) -> Self {
-        Registry { path: data_dir.join("engines.json") }
+        Registry { path: data_dir.join("engines.json"), write_lock: std::sync::Mutex::new(()) }
     }
 
-    /// All engines, with the bundled lc0 always first.
+    fn read(&self) -> Result<EnginesFile> {
+        match std::fs::read(&self.path) {
+            Ok(bytes) => serde_json::from_slice::<StoredFile>(&bytes)
+                .map(|f| EnginesFile { engines: f.engines.into_iter().map(EngineConfig::from).collect() })
+                .map_err(Error::from),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(EnginesFile::default()),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    /// All engines, with the bundled lc0 always first. An unreadable file
+    /// lists only lc0 but is left alone (see [`Registry::upsert`]).
     pub fn list(&self) -> Vec<EngineConfig> {
-        let mut file: EnginesFile = std::fs::read(&self.path).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
+        let mut file = self.read().unwrap_or_else(|e| {
+            log::warn!("engines.json unreadable: {e}");
+            EnginesFile::default()
+        });
         if !file.engines.iter().any(|e| e.id == LC0_ID) {
             file.engines.insert(0, EngineConfig::lc0());
         }
         file.engines
+    }
+
+    /// Like [`Registry::list`], but an unreadable file is moved aside (so it
+    /// can be recovered) instead of being silently overwritten.
+    fn list_for_write(&self) -> Result<Vec<EngineConfig>> {
+        if let Err(e) = self.read() {
+            let backup = self.path.with_extension(format!("json.broken-{}", chrono::Utc::now().timestamp()));
+            std::fs::rename(&self.path, &backup)?;
+            log::warn!("engines.json was unreadable ({e}); moved to {}", backup.display());
+        }
+        Ok(self.list())
     }
 
     pub fn get(&self, id: &str) -> Result<EngineConfig> {
@@ -94,7 +150,8 @@ impl Registry {
     }
 
     pub fn upsert(&self, config: EngineConfig) -> Result<()> {
-        let mut all = self.list();
+        let _lock = self.write_lock.lock().unwrap();
+        let mut all = self.list_for_write()?;
         match all.iter_mut().find(|e| e.id == config.id) {
             Some(existing) => *existing = config,
             None => all.push(config),
@@ -106,7 +163,8 @@ impl Registry {
         if id == LC0_ID {
             return Err(Error::other("the bundled engine can't be removed"));
         }
-        let all = self.list().into_iter().filter(|e| e.id != id).collect();
+        let _lock = self.write_lock.lock().unwrap();
+        let all = self.list_for_write()?.into_iter().filter(|e| e.id != id).collect();
         self.save(all)
     }
 
@@ -162,5 +220,28 @@ mod tests {
         assert_eq!(r.get("stockfish-1").unwrap().option("threads"), Some("4"));
         r.remove("stockfish-1").unwrap();
         assert_eq!(r.list().len(), 1);
+    }
+
+    #[test]
+    fn a_broken_file_is_kept_aside_not_overwritten() {
+        let dir = tempfile::tempdir().unwrap();
+        let r = Registry::new(dir.path());
+        std::fs::write(dir.path().join("engines.json"), b"{ not json").unwrap();
+        assert_eq!(r.list().len(), 1, "only lc0 while the file is unreadable");
+        r.upsert(EngineConfig {
+            id: "x".into(),
+            name: "X".into(),
+            kind: EngineKind::Uci,
+            path: None,
+            options: vec![],
+            available_options: vec![],
+        })
+        .unwrap();
+        let backups =
+            std::fs::read_dir(dir.path()).unwrap().flatten().filter(|e| e.file_name().to_string_lossy().contains("broken")).count();
+        assert_eq!(backups, 1, "the unreadable file was moved aside");
+        // Older files without the newer fields still load.
+        std::fs::write(dir.path().join("engines.json"), br#"{"engines":[{"id":"sf","name":"SF","kind":"uci"}]}"#).unwrap();
+        assert!(r.get("sf").is_ok());
     }
 }

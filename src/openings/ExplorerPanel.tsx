@@ -48,7 +48,7 @@ export function ExplorerPanel({ fen, color, onPlay, source, onSourceChange }: Pr
       if (r.status === "ok") setResult(r.data);
       else {
         setResult(null);
-        setError(r.error);
+        setError(r.error.message);
       }
     }, 150);
     return () => {
@@ -92,14 +92,17 @@ export function ExplorerPanel({ fen, color, onPlay, source, onSourceChange }: Pr
         </Text>
       )}
       {result && result.moves.length > 0 && (
-        <div style={{ opacity: loading ? 0.6 : 1 }}>
+        // While the next position loads these moves belong to the previous
+        // one, so they can't be played.
+        <div style={{ opacity: loading ? 0.6 : 1, pointerEvents: loading ? "none" : undefined }} aria-busy={loading}>
           {result.moves.map((m) => (
             <div
               key={m.uci}
               className="engine-line"
               role="button"
               aria-label={`Explorer move ${m.san}`}
-              onClick={() => onPlay(m.uci)}
+              aria-disabled={loading}
+              onClick={() => !loading && onPlay(m.uci)}
               style={{ display: "grid", gridTemplateColumns: "52px 56px 1fr 44px", alignItems: "center", gap: 8 }}
             >
               <span style={{ fontWeight: 650 }}>{m.san}</span>

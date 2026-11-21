@@ -1,16 +1,44 @@
 import { notifications } from "@mantine/notifications";
-import { commands } from "../bindings";
+import { commands, type ErrorKind, type ErrorPayload } from "../bindings";
 
 export { commands };
 export * from "../bindings";
 
-type CommandResult<T> = { status: "ok"; data: T } | { status: "error"; error: string };
+type CommandResult<T> = { status: "ok"; data: T } | { status: "error"; error: ErrorPayload };
 
-/** Unwraps a command result, throwing the Rust error message on failure. */
+/** An error from a Rust command: the message plus a kind the UI can act on. */
+export class AppError extends Error {
+  readonly kind: ErrorKind;
+  constructor(payload: ErrorPayload) {
+    super(payload.message);
+    this.name = "AppError";
+    this.kind = payload.kind;
+  }
+}
+
+function isPayload(e: unknown): e is ErrorPayload {
+  return typeof e === "object" && e !== null && "kind" in e && "message" in e;
+}
+
+/** The readable message of anything thrown or returned as an error. */
+export function errorMessage(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  if (isPayload(e)) return e.message;
+  return String(e);
+}
+
+/** The kind of a command error, if it is one. */
+export function errorKind(e: unknown): ErrorKind | null {
+  if (e instanceof AppError) return e.kind;
+  if (isPayload(e)) return e.kind;
+  return null;
+}
+
+/** Unwraps a command result, throwing an [`AppError`] on failure. */
 export async function unwrap<T>(call: Promise<CommandResult<T>>): Promise<T> {
   const result = await call;
   if (result.status === "error") {
-    throw new Error(result.error);
+    throw new AppError(result.error);
   }
   return result.data;
 }
@@ -26,6 +54,6 @@ export async function tryCommand<T>(call: Promise<CommandResult<T>>, title = "So
 }
 
 export function notifyError(title: string, e: unknown) {
-  const message = e instanceof Error ? e.message : String(e);
-  notifications.show({ color: "red", title, message, autoClose: 8000 });
+  if (errorKind(e) === "cancelled") return;
+  notifications.show({ color: "red", title, message: errorMessage(e), autoClose: 8000 });
 }

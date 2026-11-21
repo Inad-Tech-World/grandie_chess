@@ -3,10 +3,12 @@
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { notifications } from "@mantine/notifications";
 import { commands, notifyError, unwrap, type GameTree, type ReviewResult, type Side } from "./api";
-import { emptyTree, header } from "./tree";
+import { emptyTree, header, lastOfLine } from "./tree";
 import { activeTab, newId, useApp } from "../stores/app";
 import { useAnalysis } from "../stores/analysis";
 import { usePlay } from "../stores/play";
+import { stopTabEngines, useEngines } from "../stores/engines";
+import { useReviews } from "../stores/reviews";
 
 export function openNewGame() {
   const existing = useApp.getState().tabs.find((t) => t.kind === "new-game");
@@ -32,27 +34,26 @@ export function openAnalysis(tree: GameTree = emptyTree(), title?: string, curre
   const analysisId = newId("analysis");
   const orientation = opts.orientation ?? (header(tree, "GrandieUserSide") === "black" ? "black" : "white");
   const review = opts.review ?? undefined;
-  const reviewMoves = review ? review.moves.map((m) => m.uci) : undefined;
-  useAnalysis.getState().create(analysisId, { tree, current, orientation, autoReview: opts.autoReview, gameId: opts.gameId, review, reviewMoves });
+  useAnalysis.getState().create(analysisId, { tree, current, orientation, autoReview: opts.autoReview, gameId: opts.gameId, review });
   useApp.getState().openTab({ id: newId("tab"), kind: "analysis", analysisId, title: title ?? treeTitle(tree, "Analysis") });
   return analysisId;
 }
 
 export async function openAnalysisFromPgn(pgn: string, title?: string, opts: OpenOptions & { atStart?: boolean } = {}) {
-  const parsed = await commands.pgnParse(pgn);
+  let parsed;
+  try {
+    parsed = await commands.pgnParse(pgn);
+  } catch (e) {
+    notifyError("Could not read the PGN", e);
+    return;
+  }
   if (parsed.games.length === 0) {
     notifyError("No game found", parsed.errors.join("\n") || "The PGN contains no games.");
     return;
   }
   const tree = parsed.games[0];
-  const last = tree.nodes.length > 1 && !opts.atStart ? lastMainline(tree) : 0;
+  const last = tree.nodes.length > 1 && !opts.atStart ? lastOfLine(tree) : 0;
   openAnalysis(tree, title, last, opts);
-}
-
-function lastMainline(tree: GameTree): number {
-  let id = 0;
-  while (tree.nodes[id].children.length) id = tree.nodes[id].children[0];
-  return id;
 }
 
 export async function openPgnFiles() {
@@ -98,7 +99,12 @@ export async function saveActiveTab() {
     if (pgn) await savePgnText(pgn, `${tab.title}.pgn`);
   } else if (tab.kind === "analysis") {
     const doc = useAnalysis.getState().docs[tab.analysisId];
-    if (doc) await savePgnText(await commands.pgnWrite(doc.tree), `${tab.title}.pgn`);
+    if (!doc) return;
+    try {
+      await savePgnText(await commands.pgnWrite(doc.tree), `${tab.title}.pgn`);
+    } catch (e) {
+      notifyError("Could not save", e);
+    }
   }
 }
 
@@ -115,15 +121,20 @@ export function activeFen(): string | null {
 export async function closeTab(id: string) {
   const closed = useApp.getState().closeTab(id);
   if (closed?.kind === "play") {
-    await commands.playClose(closed.sessionId);
     usePlay.getState().remove(closed.sessionId);
+    const r = await commands.playClose(closed.sessionId).catch((e) => ({ status: "error" as const, error: e }));
+    if (r.status === "error") notifyError("The game's engine didn't close cleanly", r.error);
   } else if (closed?.kind === "analysis") {
+    // A review still running for this tab would only be thrown away.
+    if (useReviews.getState().progress[closed.analysisId]) void commands.reviewCancel(closed.analysisId);
     useAnalysis.getState().remove(closed.analysisId);
+    stopTabEngines(closed.id);
+    useEngines.getState().removeTab(closed.id);
   }
 }
 
 export async function pasteFenOrPgn() {
-  let text = "";
+  let text: string;
   try {
     text = (await navigator.clipboard.readText()).trim();
   } catch {

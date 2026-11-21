@@ -1,16 +1,19 @@
 import { useEffect, useState } from "react";
 import { ActionIcon, Badge, Chip, Group, Loader, SegmentedControl, Text, Tooltip } from "@mantine/core";
 import { IconPlayerPlayFilled, IconPlayerStopFilled } from "@tabler/icons-react";
-import { commands } from "../lib/api";
+import { commands, notifyError } from "../lib/api";
 import { formatScore } from "../lib/score";
 import { moveNumber } from "../lib/format";
-import { sameFen, useEngines } from "../stores/engines";
+import { sameFen } from "../lib/fen";
+import { DEFAULT_TAB_ENGINES, useEngines } from "../stores/engines";
 import type { AnalysisLine } from "../bindings";
 
 interface EnginePanelProps {
   tabId: string;
   fen: string;
   onPlayLine: (pv: string[]) => void;
+  /** The coach plays this line on the board and explains it. */
+  onExplainLine?: (line: AnalysisLine) => void;
 }
 
 function Wdl({ line }: { line: AnalysisLine }) {
@@ -42,15 +45,15 @@ function pvText(fen: string, san: string[]): string {
   return parts.join(" ");
 }
 
-export function EnginePanel({ tabId, fen, onPlayLine }: EnginePanelProps) {
+export function EnginePanel({ tabId, fen, onPlayLine, onExplainLine }: EnginePanelProps) {
   const engines = useEngines((s) => s.engines);
-  const tab = useEngines((s) => s.tabs[tabId]) ?? { enabled: ["lc0"], running: false, multipv: 3 };
+  const tab = useEngines((s) => s.tabs[tabId]) ?? DEFAULT_TAB_ENGINES;
   const lines = useEngines((s) => s.lines);
   const setTab = useEngines((s) => s.setTab);
   const [backend, setBackend] = useState<string | null>(null);
 
   useEffect(() => {
-    if (engines.length === 0) void useEngines.getState().refresh();
+    if (engines.length === 0) useEngines.getState().refresh().catch((e) => notifyError("Could not list the engines", e));
   }, [engines.length]);
 
   useEffect(() => {
@@ -139,6 +142,19 @@ export function EnginePanel({ tabId, fen, onPlayLine }: EnginePanelProps) {
               >
                 <span className="engine-score tabular">{formatScore(line.score)}</span>
                 <span className="engine-pv">{pvText(fen, line.san)}</span>
+                {onExplainLine && line.san.length > 0 && (
+                  <button
+                    type="button"
+                    className="engine-why"
+                    aria-label={`Why line ${line.multipv}?`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onExplainLine(line);
+                    }}
+                  >
+                    Why?
+                  </button>
+                )}
               </div>
             ))}
             {top && (

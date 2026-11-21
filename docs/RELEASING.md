@@ -112,6 +112,15 @@ pnpm tauri build
 
 The installer is written to `src-tauri\target\release\bundle\nsis\`. It installs per user (no administrator rights) into `%LOCALAPPDATA%\Grandie Chess`; the app's data lives in `%APPDATA%\com.grandie.chess`.
 
+## Pinned downloads
+
+- **Stockfish** is pinned in `src-tauri/src/engine/install.rs` (`STOCKFISH_VERSION`, the release URL and each asset's size and SHA-256). To move to a new release, take the sizes and `sha256:` digests from `https://api.github.com/repos/official-stockfish/Stockfish/releases/tags/sf_<N>` and update all of them together; the `pins_a_checksummed_asset_for_this_platform` test checks the shape.
+- **The masters catalogue** (`src-tauri/resources/masters/players.json`) is regenerated with `python3 scripts/masters-catalog.py`. The legends pack is rebuilt with `scripts/build-legends.py DIR` from a folder of PGN Mentor player files; the `legends_import_once_and_are_all_legal` test checks every game.
+
+## Microphone (macOS)
+
+Voice input records the microphone, so the app needs `NSMicrophoneUsageDescription` (in `src-tauri/Info.plist`, merged by Tauri) and, because the hardened runtime is on, the `com.apple.security.device.audio-input` entitlement (`src-tauri/Entitlements.plist`, referenced from `bundle.macOS.entitlements`). Without the entitlement macOS silently denies the microphone in signed builds.
+
 ## Distribution notes
 
 - Grandie Chess is GPL-3.0-or-later; every release must make the matching source available. The GitHub tag does that. The Windows build bundles the official lc0 v0.32.1 binary rather than one built here; its source is the `engine/lc0` submodule, which is pinned to the same tag. When you update the submodule, update the version and hashes in `engine/fetch-lc0-windows.ps1` to match.

@@ -22,7 +22,7 @@ use super::position::{
 use super::tree::GameTree;
 use crate::engine::catalog::{network_path, resolve_full_network, Catalog, OpponentKind, OpponentLevel};
 use crate::engine::lc0::{self, Lc0Config};
-use crate::engine::process::{position_command, Engine};
+use crate::engine::process::{position_command, Engine, SearchControl};
 use crate::engine::uci::Wdl;
 use crate::error::{Error, Result};
 use crate::settings::Settings;
@@ -61,6 +61,8 @@ pub struct PlayedMove {
 #[serde(rename_all = "camelCase")]
 pub struct PlaySnapshot {
     pub session_id: u32,
+    /// Increases with every change, so the UI can ignore out-of-order snapshots.
+    pub seq: u32,
     pub setup: PlaySetup,
     pub level: OpponentLevel,
     pub network: String,
@@ -135,6 +137,8 @@ pub struct PlaySession {
     last_draw_offer_ply: Option<usize>,
     error: Option<String>,
     closed: bool,
+    /// Bumped on every emitted change; see [`PlaySnapshot::seq`].
+    seq: u32,
 }
 
 type SessionRef = Arc<Mutex<PlaySession>>;
@@ -163,6 +167,7 @@ impl PlaySession {
         }
         PlaySnapshot {
             session_id: self.id,
+            seq: self.seq,
             setup: self.setup.clone(),
             level: self.level.clone(),
             network: self.network.clone(),
@@ -186,7 +191,8 @@ impl PlaySession {
         }
     }
 
-    fn emit(&self) {
+    fn emit(&mut self) {
+        self.seq = self.seq.wrapping_add(1);
         self.ctx.observer.update(self.snapshot());
     }
 
@@ -315,6 +321,16 @@ impl PlaySession {
         }
     }
 
+    /// How long the engine's search may take before it counts as hung.
+    fn search_timeout(&self, now: Instant) -> Duration {
+        match (&self.clock, self.level.nodes) {
+            (Some(clock), None) if clock.running().is_some() => {
+                Duration::from_millis(clock.remaining(self.engine_side(), now).max(0) as u64) + Duration::from_secs(15)
+            }
+            _ => Duration::from_secs(120),
+        }
+    }
+
     /// A short pause so low-strength opponents don't answer instantly.
     fn human_delay(&self, now: Instant) -> Option<Duration> {
         if !self.ctx.settings.human_think_time || self.level.kind == OpponentKind::Full {
@@ -378,7 +394,7 @@ impl PlayManager {
                 if resolve_full_network(catalog, networks_dir, settings.default_network.as_deref()).is_some() {
                     vec![]
                 } else {
-                    vec![settings.default_network.clone().unwrap_or_else(|| "791556".into())]
+                    vec![settings.default_network.clone().unwrap_or_else(|| crate::engine::catalog::RECOMMENDED_NETWORK_ID.into())]
                 }
             }
             _ => level.network.iter().filter(|id| !network_path(networks_dir, id).exists()).cloned().collect(),
@@ -392,12 +408,7 @@ impl PlayManager {
                 .ok_or_else(|| Error::NotFound("No full-strength network is installed".into()))?,
             _ => level.network.clone().expect("non-full levels name a network"),
         };
-        let weights = network_path(&ctx.networks_dir, &network);
-        let config = Lc0Config::for_level(&level, weights, &ctx.settings);
-        let engine = lc0::start(&ctx.lc0_path, &config).await?;
-        engine.send("ucinewgame").await?;
-        engine.ready(lc0::READY_TIMEOUT).await?;
-
+        // Check the position before paying for an engine start-up.
         let start = match setup.start_fen.as_deref().map(str::trim).filter(|f| !f.is_empty()) {
             Some(fen) => parse_fen(fen)?,
             None => Chess::default(),
@@ -405,6 +416,11 @@ impl PlayManager {
         if start.is_game_over() {
             return Err(Error::Chess("that position is already finished".into()));
         }
+        let weights = network_path(&ctx.networks_dir, &network);
+        let config = Lc0Config::for_level(&level, weights, &ctx.settings);
+        let engine = lc0::start(&ctx.lc0_path, &config).await?;
+        engine.send("ucinewgame").await?;
+        engine.ready(lc0::READY_TIMEOUT).await?;
         let user_side = match setup.user_side {
             SideChoice::White => Side::White,
             SideChoice::Black => Side::Black,
@@ -451,6 +467,7 @@ impl PlayManager {
             last_draw_offer_ply: None,
             error: None,
             closed: false,
+            seq: 0,
             setup,
         };
         let snapshot = session.snapshot();
@@ -567,12 +584,17 @@ impl PlayManager {
         Ok(accept)
     }
 
-    pub async fn set_hint(&self, id: u32, hint: Option<String>) -> Result<()> {
+    /// Show a hint, unless the game has moved on since it was asked for:
+    /// `ply` is the number of moves played when the hint was computed.
+    pub async fn set_hint(&self, id: u32, ply: usize, hint: Option<String>) -> Result<bool> {
         let session = self.get(id)?;
         let mut s = session.lock().await;
+        if s.moves.len() != ply || !s.is_users_turn() {
+            return Ok(false);
+        }
         s.hint = hint;
         s.emit();
-        Ok(())
+        Ok(true)
     }
 
     /// Start fen and moves of the current position, for asking another engine.
@@ -627,7 +649,7 @@ fn spawn_engine_move(session: SessionRef) {
 }
 
 async fn engine_move(session: &SessionRef) -> Result<()> {
-    let (engine, generation, position, go, delay) = {
+    let (engine, generation, position, go, delay, timeout) = {
         let mut s = session.lock().await;
         if s.outcome.is_some() || s.is_users_turn() || s.closed {
             return Ok(());
@@ -636,12 +658,20 @@ async fn engine_move(session: &SessionRef) -> Result<()> {
         s.engine_thinking = true;
         s.emit();
         let moves: Vec<String> = s.moves.iter().map(|m| m.uci.clone()).collect();
-        (s.engine.clone(), s.generation, position_command(&s.start_fen, &moves), s.go_command(now), s.human_delay(now))
+        (
+            s.engine.clone(),
+            s.generation,
+            position_command(&s.start_fen, &moves),
+            s.go_command(now),
+            s.human_delay(now),
+            s.search_timeout(now),
+        )
     };
     let started = Instant::now();
     let mut last_wdl = None;
+    let ctl = SearchControl { timeout: Some(timeout), ..Default::default() };
     let result = engine
-        .search(&position, &go, |info| {
+        .search_ctl(&position, &go, &ctl, |info| {
             if info.wdl.is_some() {
                 last_wdl = info.wdl;
             }

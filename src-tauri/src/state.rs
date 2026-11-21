@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
+
 use std::sync::{Arc, Mutex, RwLock};
 
 use crate::analysis::live::{AnalysisManager, EngineLaunch};
@@ -26,13 +27,43 @@ pub struct AppState {
     pub db: DbPool,
     pub puzzles: DbPool,
     pub analysis: AnalysisManager,
-    /// Cancel flags of running game reviews, by review id.
-    pub reviews: Mutex<HashMap<String, Arc<AtomicBool>>>,
+    /// Running game reviews, by review id.
+    pub reviews: Mutex<HashMap<String, Arc<ReviewJob>>>,
     pub http: reqwest::Client,
     pub explorer_cache: crate::net::explorer::ExplorerCache,
     /// Full-strength engine used for hints, kept warm between requests.
     helper: tokio::sync::Mutex<Option<(Lc0Config, Arc<Engine>)>>,
-    downloads: Mutex<HashSet<String>>,
+    downloads: Arc<Mutex<HashSet<String>>>,
+    /// The microphone, for voice input.
+    pub recorder: crate::voice::recorder::Recorder,
+    /// Engines behind the coaches.
+    pub coach: crate::coach::engine::CoachEngines,
+    /// Cancel flags of running coach requests, by request id.
+    pub coach_requests: Mutex<HashMap<String, Arc<AtomicBool>>>,
+    /// The OpenRouter key, read from the credential store once. `None` until
+    /// read; `Some(None)` when no key is saved.
+    ai_key: RwLock<Option<Option<String>>>,
+}
+
+/// A running game review: its cancel flag and, once started, its engine (so
+/// app shutdown can stop it).
+#[derive(Default)]
+pub struct ReviewJob {
+    pub cancel: AtomicBool,
+    pub engine: Mutex<Option<Arc<Engine>>>,
+}
+
+/// Marks a download as running until dropped, so an error path can't leave
+/// it stuck as "already downloading".
+pub struct DownloadGuard {
+    id: String,
+    downloads: Arc<Mutex<HashSet<String>>>,
+}
+
+impl Drop for DownloadGuard {
+    fn drop(&mut self) {
+        self.downloads.lock().unwrap().remove(&self.id);
+    }
 }
 
 impl AppState {
@@ -52,7 +83,11 @@ impl AppState {
             http: http_client(),
             explorer_cache: Default::default(),
             helper: tokio::sync::Mutex::new(None),
-            downloads: Mutex::new(HashSet::new()),
+            downloads: Arc::new(Mutex::new(HashSet::new())),
+            ai_key: RwLock::new(None),
+            coach: Default::default(),
+            recorder: Default::default(),
+            coach_requests: Mutex::new(HashMap::new()),
         })
     }
 
@@ -128,18 +163,84 @@ impl AppState {
         }
     }
 
-    /// Mark a download as running; false if it already is.
-    pub fn begin_download(&self, id: &str) -> bool {
-        self.downloads.lock().unwrap().insert(id.to_string())
+    /// Mark a download as running until the guard is dropped; `None` if it
+    /// already is.
+    pub fn begin_download(&self, id: &str) -> Option<DownloadGuard> {
+        self.downloads
+            .lock()
+            .unwrap()
+            .insert(id.to_string())
+            .then(|| DownloadGuard { id: id.to_string(), downloads: self.downloads.clone() })
     }
 
-    pub fn end_download(&self, id: &str) {
-        self.downloads.lock().unwrap().remove(id);
+    /// The engine for game reviews: the user's choice, else Stockfish when
+    /// installed (much faster on a CPU), else the bundled lc0.
+    pub fn review_engine_id(&self, requested: Option<&str>) -> String {
+        let configured = self.settings().review_engine_id;
+        let wanted = requested.map(str::to_string).or(configured);
+        let engines = self.registry.list();
+        if let Some(id) = wanted.filter(|id| engines.iter().any(|e| &e.id == id)) {
+            return id;
+        }
+        if engines.iter().any(|e| e.id == crate::engine::install::STOCKFISH_ID) {
+            return crate::engine::install::STOCKFISH_ID.into();
+        }
+        crate::engine::registry::LC0_ID.into()
+    }
+
+    /// Shut down every helper process that runs the engine `id`, before the
+    /// engine is replaced or removed.
+    pub async fn close_engine_users(&self, id: &str) {
+        let reviews: Vec<Arc<ReviewJob>> = self.reviews.lock().unwrap().values().cloned().collect();
+        for job in reviews {
+            let engine = job.engine.lock().unwrap().clone();
+            if engine.is_some_and(|e| e.path.to_string_lossy().contains(id)) {
+                job.cancel.store(true, std::sync::atomic::Ordering::SeqCst);
+            }
+        }
+        self.coach.close_engine(id).await;
+    }
+
+    /// The saved OpenRouter key, if any (cached after the first read).
+    pub async fn ai_key(&self) -> Result<Option<String>> {
+        if let Some(k) = self.ai_key.read().unwrap().clone() {
+            return Ok(k);
+        }
+        let key = crate::commands::blocking(|| crate::secrets::get(crate::secrets::Secret::OpenRouterKey)).await?;
+        *self.ai_key.write().unwrap() = Some(key.clone());
+        Ok(key)
+    }
+
+    /// Forget the cached key after it was changed.
+    pub fn set_cached_ai_key(&self, key: Option<String>) {
+        *self.ai_key.write().unwrap() = Some(key);
+    }
+
+    /// An OpenRouter client, or a [`Error::NoApiKey`] the UI turns into an
+    /// "Open AI settings" prompt.
+    pub async fn openrouter(&self) -> Result<crate::ai::OpenRouter> {
+        match self.ai_key().await? {
+            Some(key) => Ok(crate::ai::OpenRouter::new(self.http.clone(), key)),
+            None => Err(Error::NoApiKey("Add an OpenRouter API key in Settings → AI coach to use AI features.".into())),
+        }
+    }
+
+    /// True when the coach should use AI for its words: a key is saved and
+    /// AI is switched on.
+    pub async fn ai_ready(&self) -> bool {
+        self.settings().ai.enabled && self.ai_key().await.ok().flatten().is_some()
     }
 
     pub fn shutdown(&self) {
         self.play.shutdown();
         self.analysis.shutdown();
+        self.coach.shutdown();
+        for job in self.reviews.lock().unwrap().values() {
+            job.cancel.store(true, std::sync::atomic::Ordering::SeqCst);
+            if let Some(engine) = job.engine.lock().unwrap().as_ref() {
+                engine.kill();
+            }
+        }
         if let Ok(guard) = self.helper.try_lock() {
             if let Some((_, engine)) = guard.as_ref() {
                 engine.kill();

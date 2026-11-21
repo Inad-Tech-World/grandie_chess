@@ -2,7 +2,7 @@
 
 use std::io::Read;
 
-use rusqlite::{params, Transaction};
+use rusqlite::{params, OptionalExtension, Transaction};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use shakmaty::Position;
@@ -63,6 +63,26 @@ pub struct GameRecord {
     pub played_at: Option<i64>,
     /// (Zobrist hash, ply, move played from that position).
     pub positions: Vec<(i64, u32, Option<String>)>,
+    /// "mine" (the user's database) or "masters" (the famous-games library).
+    pub collection: String,
+    /// Year from the date, also for partial dates like "1924.??.??".
+    pub year: Option<i32>,
+    /// The master whose file the game came from, and their colour in it.
+    pub subject: Option<(String, Option<Side>)>,
+}
+
+/// Sources whose games belong to the masters library.
+pub fn collection_for(source: &str) -> &'static str {
+    match source {
+        "pgnmentor" | "legends" | "masters" => "masters",
+        _ => "mine",
+    }
+}
+
+fn year_of(date: Option<&str>) -> Option<i32> {
+    let d = date?;
+    let y = d.get(..4)?;
+    y.chars().all(|c| c.is_ascii_digit()).then(|| y.parse().ok()).flatten().filter(|y| (1400..=2200).contains(y))
 }
 
 fn clean(v: Option<&str>) -> Option<String> {
@@ -141,7 +161,10 @@ pub fn record_from_tree(tree: &GameTree, source: &str, source_id: Option<String>
 
     let h = |k: &str| clean(tree.header(k));
     let elo = |k: &str| tree.header(k).and_then(|v| v.trim().parse::<i32>().ok());
+    let collection = collection_for(source);
     let user_color = match tree.header("GrandieUserSide") {
+        // A master game is never the user's, whatever the names say.
+        _ if collection == "masters" => None,
         Some("white") => Some(Side::White),
         Some("black") => Some(Side::Black),
         _ if identity.is_user(tree.header("White")) => Some(Side::White),
@@ -176,6 +199,9 @@ pub fn record_from_tree(tree: &GameTree, source: &str, source_id: Option<String>
         played_at: played_at(tree),
         positions,
         moves,
+        collection: collection.to_string(),
+        year: year_of(tree.header("Date").or(tree.header("UTCDate"))),
+        subject: None,
     })
 }
 
@@ -191,8 +217,8 @@ pub fn insert(tx: &Transaction, rec: &GameRecord) -> Result<Option<i64>> {
     let changed = tx.execute(
         "INSERT OR IGNORE INTO games (source, source_id, event, site, date, round, white, black, white_elo, black_elo,
             result, eco, opening, time_control, speed, termination, user_color, opponent_level, ply_count, start_fen,
-            moves, pgn, played_at, imported_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24)",
+            moves, pgn, played_at, imported_at, collection, year)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26)",
         params![
             rec.source,
             rec.source_id,
@@ -218,12 +244,38 @@ pub fn insert(tx: &Transaction, rec: &GameRecord) -> Result<Option<i64>> {
             rec.pgn,
             rec.played_at,
             now_secs(),
+            rec.collection,
+            rec.year,
         ],
     )?;
     if changed == 0 {
+        // Already there (e.g. Kasparov vs Topalov is in both players' files):
+        // still record that it belongs to this master too.
+        if let Some((subject, color)) = &rec.subject {
+            let existing: Option<i64> = tx
+                .query_row("SELECT id FROM games WHERE source = ?1 AND source_id = ?2", params![rec.source, rec.source_id], |r| r.get(0))
+                .optional()?;
+            if let Some(id) = existing {
+                tx.execute(
+                    "INSERT OR IGNORE INTO game_subjects (game_id, subject, color) VALUES (?1, ?2, ?3)",
+                    params![id, subject, color.map(side_str)],
+                )?;
+            }
+        }
         return Ok(None);
     }
     let id = tx.last_insert_rowid();
+    for (color, name) in [("white", &rec.white), ("black", &rec.black)] {
+        if let Some(key) = name.as_deref().map(super::players::player_key).filter(|k| !k.is_empty()) {
+            tx.execute("INSERT OR IGNORE INTO game_players (game_id, color, player_key) VALUES (?1, ?2, ?3)", params![id, color, key])?;
+        }
+    }
+    if let Some((subject, color)) = &rec.subject {
+        tx.execute(
+            "INSERT OR IGNORE INTO game_subjects (game_id, subject, color) VALUES (?1, ?2, ?3)",
+            params![id, subject, color.map(side_str)],
+        )?;
+    }
     let mut stmt = tx.prepare_cached("INSERT OR IGNORE INTO positions (hash, game_id, ply, next_move) VALUES (?1, ?2, ?3, ?4)")?;
     for (hash, ply, next) in &rec.positions {
         stmt.execute(params![hash, id, ply, next])?;
@@ -243,6 +295,31 @@ pub struct ImportSummary {
     pub newest: Option<f64>,
 }
 
+/// How many problems a summary keeps.
+const MAX_ERRORS: usize = 20;
+
+impl ImportSummary {
+    /// Add another import's counts (e.g. the next file or month).
+    pub fn merge(&mut self, other: ImportSummary) {
+        self.seen += other.seen;
+        self.imported += other.imported;
+        self.duplicates += other.duplicates;
+        self.newest = match (self.newest, other.newest) {
+            (Some(a), Some(b)) => Some(a.max(b)),
+            (a, b) => a.or(b),
+        };
+        for e in other.errors {
+            self.push_error(e);
+        }
+    }
+
+    pub fn push_error(&mut self, error: String) {
+        if self.errors.len() < MAX_ERRORS {
+            self.errors.push(error);
+        }
+    }
+}
+
 const BATCH: usize = 250;
 
 /// Import every game from a PGN stream. `progress(seen, imported)` is called
@@ -252,6 +329,44 @@ pub fn import_reader<R: Read>(
     reader: R,
     source: &str,
     identity: &UserIdentity,
+    progress: impl FnMut(&ImportSummary),
+) -> Result<ImportSummary> {
+    import_reader_with(pool, reader, source, identity, None, progress)
+}
+
+/// A master whose games are being imported: an id ("Carlsen") and the
+/// player key (surname + initial) to find their colour in each game.
+#[derive(Debug, Clone)]
+pub struct Subject {
+    pub id: String,
+    pub key: String,
+}
+
+impl Subject {
+    /// Which colour the subject played, by surname.
+    pub fn color_in(&self, white: Option<&str>, black: Option<&str>) -> Option<Side> {
+        let surname = super::players::key_surname(&self.key);
+        let matches = |name: Option<&str>| name.map(super::players::player_key).is_some_and(|k| super::players::key_surname(&k) == surname);
+        match (matches(white), matches(black)) {
+            (true, false) => Some(Side::White),
+            (false, true) => Some(Side::Black),
+            // Both or neither (e.g. Polgar vs Polgar): fall back to the full key.
+            _ => match (white.map(super::players::player_key), black.map(super::players::player_key)) {
+                (Some(w), _) if w == self.key => Some(Side::White),
+                (_, Some(b)) if b == self.key => Some(Side::Black),
+                _ => None,
+            },
+        }
+    }
+}
+
+/// [`import_reader`] for a master's games: each is linked to `subject`.
+pub fn import_reader_with<R: Read>(
+    pool: &DbPool,
+    reader: R,
+    source: &str,
+    identity: &UserIdentity,
+    subject: Option<&Subject>,
     mut progress: impl FnMut(&ImportSummary),
 ) -> Result<ImportSummary> {
     let mut summary = ImportSummary::default();
@@ -280,7 +395,13 @@ pub fn import_reader<R: Read>(
                     summary.errors.push(format!("game {}: {w}", summary.seen));
                 }
             }
-            record_from_tree(&tree, source, None, identity)
+            record_from_tree(&tree, source, None, identity).map(|mut rec| {
+                if let Some(subject) = subject {
+                    let color = subject.color_in(rec.white.as_deref(), rec.black.as_deref());
+                    rec.subject = Some((subject.id.clone(), color));
+                }
+                rec
+            })
         }) {
             Ok(rec) => batch.push(rec),
             Err(e) => {

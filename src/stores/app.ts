@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-export type Section = "boards" | "database" | "openings" | "puzzles" | "engines" | "progress" | "settings";
+export type Section = "boards" | "database" | "openings" | "masters" | "puzzles" | "engines" | "progress" | "settings";
 
 export type Tab =
   | { id: string; kind: "new-game"; title: string }

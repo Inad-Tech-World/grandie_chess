@@ -13,6 +13,7 @@ import { PuzzlesScreen } from "../screens/PuzzlesScreen";
 import { ProgressScreen } from "../screens/ProgressScreen";
 import { DatabaseScreen } from "../screens/DatabaseScreen";
 import { OpeningsScreen } from "../screens/OpeningsScreen";
+import { MastersScreen } from "../screens/MastersScreen";
 
 function Welcome() {
   return (
@@ -59,6 +60,7 @@ export function Shell() {
           {section === "settings" && <SettingsScreen />}
           {section === "database" && <DatabaseScreen />}
           {section === "openings" && <OpeningsScreen />}
+          {section === "masters" && <MastersScreen />}
           {section === "puzzles" && <PuzzlesScreen />}
           {section === "progress" && <ProgressScreen />}
         </div>

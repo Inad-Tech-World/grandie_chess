@@ -35,6 +35,100 @@ pub struct Settings {
     pub lichess_username: Option<String>,
     pub chesscom_username: Option<String>,
     pub onboarding_done: bool,
+    /// Engine for game reviews; `None` picks Stockfish when installed, else lc0.
+    pub review_engine_id: Option<String>,
+    /// The talking coach.
+    pub coach: CoachSettings,
+    /// AI models used through OpenRouter (the key itself is in the keychain).
+    pub ai: AiSettings,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub enum Verbosity {
+    Brief,
+    Normal,
+    Detailed,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub enum VoiceOutput {
+    /// The computer's own voices: free and offline.
+    System,
+    /// A neural voice from OpenRouter (needs a key; costs a little per use).
+    Cloud,
+    /// Captions only.
+    Off,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
+#[serde(default, rename_all = "camelCase")]
+pub struct CoachSettings {
+    /// "stockfish" or "leela"; `None` picks Stockfish when installed.
+    pub coach_id: Option<String>,
+    pub verbosity: Verbosity,
+    pub voice_output: VoiceOutput,
+    /// Name of the system voice; `None` uses the default voice.
+    pub system_voice: Option<String>,
+    /// Speaking speed, 0.5..2.0.
+    pub speech_rate: f64,
+    /// Say the opponent's moves out loud in games.
+    pub announce_moves: bool,
+    /// The language the coach speaks and writes, e.g. "English".
+    pub language: String,
+}
+
+impl Default for CoachSettings {
+    fn default() -> Self {
+        CoachSettings {
+            coach_id: None,
+            verbosity: Verbosity::Normal,
+            voice_output: VoiceOutput::System,
+            system_voice: None,
+            speech_rate: 1.0,
+            announce_moves: false,
+            language: "English".into(),
+        }
+    }
+}
+
+/// OpenRouter model ids. Defaults are checked against OpenRouter's catalog;
+/// the Settings screen lists what is currently available.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
+#[serde(default, rename_all = "camelCase")]
+pub struct AiSettings {
+    /// Use OpenRouter for the coach's words and for voice input. Off until a
+    /// key is saved; the coach falls back to built-in explanations.
+    pub enabled: bool,
+    /// Short narration of lines on the board (fast and cheap).
+    pub narrate_model: String,
+    /// Answers to questions and longer explanations.
+    pub explain_model: String,
+    /// Speech-to-text for voice input.
+    pub stt_model: String,
+    /// Text-to-speech for the cloud voice.
+    pub tts_model: String,
+    pub tts_voice: String,
+}
+
+pub const DEFAULT_NARRATE_MODEL: &str = "anthropic/claude-haiku-5.5";
+pub const DEFAULT_EXPLAIN_MODEL: &str = "anthropic/claude-sonnet-5.5";
+pub const DEFAULT_STT_MODEL: &str = "openai/gpt-4o-mini-transcribe";
+pub const DEFAULT_TTS_MODEL: &str = "mistralai/voxtral-mini-tts-3-0";
+pub const DEFAULT_TTS_VOICE: &str = "en_paul_confident";
+
+impl Default for AiSettings {
+    fn default() -> Self {
+        AiSettings {
+            enabled: false,
+            narrate_model: DEFAULT_NARRATE_MODEL.into(),
+            explain_model: DEFAULT_EXPLAIN_MODEL.into(),
+            stt_model: DEFAULT_STT_MODEL.into(),
+            tts_model: DEFAULT_TTS_MODEL.into(),
+            tts_voice: DEFAULT_TTS_VOICE.into(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -65,6 +159,9 @@ impl Default for Settings {
             lichess_username: None,
             chesscom_username: None,
             onboarding_done: false,
+            review_engine_id: None,
+            coach: CoachSettings::default(),
+            ai: AiSettings::default(),
         }
     }
 }
@@ -106,5 +203,11 @@ mod tests {
         let partial = Settings::load(&path);
         assert_eq!(partial.player_name, "Bo");
         assert_eq!(partial.piece_set, "cburnett");
+        assert_eq!(partial.ai.narrate_model, DEFAULT_NARRATE_MODEL, "new nested sections get defaults");
+
+        std::fs::write(&path, r#"{"coach":{"verbosity":"brief"}}"#).unwrap();
+        let nested = Settings::load(&path);
+        assert_eq!(nested.coach.verbosity, Verbosity::Brief);
+        assert_eq!(nested.coach.speech_rate, 1.0, "missing nested fields get defaults too");
     }
 }

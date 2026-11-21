@@ -15,6 +15,9 @@ interface Props {
 /** Set up a position to search for, exactly or as a pattern of pieces. */
 export function PositionSearchModal({ opened, onClose, onSearch }: Props) {
   const [initial, setInitial] = useState(START_BOARD);
+  // Bumped on every load, so loading the same position again still resets
+  // the editor after the user has moved pieces.
+  const [resetToken, setResetToken] = useState(0);
   const [board, setBoard] = useState(START_BOARD);
   const [turn, setTurn] = useState<Side>("white");
   const [mode, setMode] = useState<"exact" | "partial">("exact");
@@ -24,6 +27,7 @@ export function PositionSearchModal({ opened, onClose, onSearch }: Props) {
     const [placement, side] = fen.trim().split(/\s+/);
     if (!placement) return;
     setInitial(placement);
+    setResetToken((t) => t + 1);
     setBoard(placement);
     if (side === "b") setTurn("black");
     if (side === "w") setTurn("white");
@@ -35,7 +39,7 @@ export function PositionSearchModal({ opened, onClose, onSearch }: Props) {
   return (
     <Modal opened={opened} onClose={onClose} title="Search by position" size="auto" centered>
       <Group align="flex-start" gap="lg" wrap="nowrap">
-        <BoardEditor initialBoard={initial} size={360} turn={turn} onTurnChange={setTurn} onChange={setBoard} />
+        <BoardEditor initialBoard={initial} resetToken={resetToken} size={360} turn={turn} onTurnChange={setTurn} onChange={setBoard} />
         <Stack w={260} gap="sm">
           <SegmentedControl
             value={mode}

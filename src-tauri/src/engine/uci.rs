@@ -62,8 +62,10 @@ pub struct InfoLine {
 
 impl InfoLine {
     /// True for lines that carry a search result (score and principal variation).
+    /// Lines whose score is only a bound (from an aspiration-window fail) are
+    /// skipped: their score isn't the engine's real evaluation.
     pub fn is_search_line(&self) -> bool {
-        self.score.is_some() && !self.pv.is_empty()
+        self.score.is_some() && !self.pv.is_empty() && !matches!(self.bound, Some(ScoreBound::Lower | ScoreBound::Upper))
     }
 }
 
@@ -136,7 +138,8 @@ pub fn parse_line(line: &str) -> UciMessage {
                     _ => None,
                 },
             },
-            None => UciMessage::Other(line.to_string()),
+            // A bare `bestmove` means there is no move to play.
+            None => UciMessage::BestMove { best: "(none)".into(), ponder: None },
         },
         Some("info") => UciMessage::Info(parse_info(&tokens[1..])),
         Some("option") => parse_option(&tokens[1..]).map(UciMessage::Option).unwrap_or_else(|| UciMessage::Other(line.to_string())),
@@ -321,6 +324,13 @@ mod tests {
         let UciMessage::Info(info) = parse_line(SF_BOUND) else { panic!() };
         assert_eq!(info.bound, Some(ScoreBound::Lower));
         assert_eq!(info.nodes, Some(300000.0));
+        assert!(!info.is_search_line(), "bound-only scores aren't real evaluations");
+    }
+
+    #[test]
+    fn bare_bestmove_means_no_move() {
+        assert_eq!(parse_line("bestmove"), UciMessage::BestMove { best: "(none)".into(), ponder: None });
+        assert_eq!(parse_line("bestmove (none)"), UciMessage::BestMove { best: "(none)".into(), ponder: None });
     }
 
     #[test]

@@ -7,9 +7,16 @@ import type { Key } from "@lichess-org/chessground/types";
 import type { Side } from "../bindings";
 import { PromotionPicker, type PromotionRole } from "./PromotionPicker";
 
+export type Brush = "green" | "red" | "blue" | "yellow" | "paleBlue" | "paleGreen" | "paleGrey";
+
 export interface Arrow {
   uci: string;
-  brush?: "green" | "red" | "blue" | "yellow" | "paleBlue" | "paleGreen" | "paleGrey";
+  brush?: Brush;
+}
+
+export interface Circle {
+  square: string;
+  brush?: Brush;
 }
 
 export interface BoardProps {
@@ -23,6 +30,9 @@ export interface BoardProps {
   lastMove?: string | null;
   check?: boolean;
   arrows?: Arrow[];
+  circles?: Circle[];
+  /** The coach is demonstrating on this board (shown with a ring). */
+  coaching?: boolean;
   premove?: boolean;
   coordinates?: boolean;
   animationMs?: number;
@@ -123,8 +133,11 @@ export function Board(props: BoardProps) {
     const shapes: DrawShape[] = (props.arrows ?? [])
       .filter((a) => a.uci.length >= 4)
       .map((a) => ({ orig: a.uci.slice(0, 2) as Key, dest: a.uci.slice(2, 4) as Key, brush: a.brush ?? "green" }));
+    for (const c of props.circles ?? []) {
+      if (c.square.length === 2) shapes.push({ orig: c.square as Key, brush: c.brush ?? "green" });
+    }
     api.current?.setAutoShapes(shapes);
-  }, [props.arrows]);
+  }, [props.arrows, props.circles]);
 
   useEffect(() => {
     api.current?.redrawAll();
@@ -152,7 +165,7 @@ export function Board(props: BoardProps) {
   }
 
   return (
-    <div className="board-box" style={{ width: props.size, height: props.size }}>
+    <div className={props.coaching ? "board-box coaching" : "board-box"} style={{ width: props.size, height: props.size }} data-coaching={props.coaching ? "true" : undefined}>
       <div ref={el} style={{ width: "100%", height: "100%" }} />
       {promotion && <PromotionPicker color={promotion.color} onChoose={choosePromotion} />}
     </div>

@@ -1,23 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
-import { ActionIcon, Alert, Button, Group, Loader, SimpleGrid, Stack, Text, Tooltip } from "@mantine/core";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Alert, Button, Group, Loader, SimpleGrid, Stack, Text, Tooltip } from "@mantine/core";
 import { modals } from "@mantine/modals";
-import { useHotkeys } from "@mantine/hooks";
-import {
-  IconArrowBackUp,
-  IconBulb,
-  IconChevronLeft,
-  IconChevronRight,
-  IconChevronsLeft,
-  IconChevronsRight,
-  IconDeviceFloppy,
-  IconFlag,
-  IconHeartHandshake,
-  IconMicroscope,
-  IconRefresh,
-  IconSwitchVertical,
-} from "@tabler/icons-react";
+import { IconArrowBackUp, IconBulb, IconDeviceFloppy, IconFlag, IconHeartHandshake, IconMicroscope, IconRefresh } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import { Board, useBoardSize, type Arrow } from "../board/Board";
+import { BoardNavButtons, useBoardNav } from "../board/BoardNav";
 import { PlayerStrip } from "../board/PlayerStrip";
 import { MoveList } from "../moves/MoveList";
 import { commands, notifyError, tryCommand, unwrap } from "../lib/api";
@@ -27,6 +14,12 @@ import { useSettings } from "../stores/settings";
 import { grandieGameId, openAnalysisFromPgn, savePgnText } from "../lib/actions";
 import { playSound, soundForSan } from "../lib/sounds";
 import { useApp, newId } from "../stores/app";
+import { useCoach } from "../stores/coach";
+import { CoachPanel } from "../coach/CoachPanel";
+import { useCoachBoard } from "../coach/useCoachBoard";
+import { announce, sanToSpeech } from "../coach/speech";
+import { CLASS_STYLE } from "../lib/score";
+import type { CoachVerdict, VoiceCommand } from "../bindings";
 
 export function PlayScreen({ sessionId }: { sessionId: number }) {
   const snap = usePlay((s) => s.snapshots[sessionId]);
@@ -35,6 +28,10 @@ export function PlayScreen({ sessionId }: { sessionId: number }) {
   const setView = usePlay((s) => s.setView);
   const settings = useSettings((s) => s.settings);
   const { ref, size } = useBoardSize(108, 0);
+  const coachOwner = `play:${sessionId}`;
+  const coachBoard = useCoachBoard(coachOwner);
+  const coachMode = usePlay((s) => s.coachModes[sessionId] ?? "off");
+  const [verdict, setVerdict] = useState<{ verdict: CoachVerdict; san: string } | null>(null);
 
   useEffect(() => {
     if (!snap) {
@@ -56,38 +53,55 @@ export function PlayScreen({ sessionId }: { sessionId: number }) {
     [sessionId, total, setView],
   );
 
-  useHotkeys([
-    ["ArrowLeft", () => step(shownPly - 1)],
-    ["ArrowRight", () => step(shownPly + 1)],
-    ["ArrowUp", () => step(0)],
-    ["ArrowDown", () => step(total)],
-    ["Home", () => step(0)],
-    ["End", () => step(total)],
-    ["f", () => setView(sessionId, { orientation: orientation === "white" ? "black" : "white" })],
-  ]);
+  const nav = {
+    start: () => step(0),
+    back: () => step(shownPly - 1),
+    forward: () => step(shownPly + 1),
+    end: () => step(total),
+    flip: () => setView(sessionId, { orientation: orientation === "white" ? "black" : "white" }),
+  };
+  useBoardNav(nav);
 
   const outcomeReason = snap?.outcome?.reason;
   // Sounds for each new move and for the end of the game.
   const moveCount = snap?.moves.length ?? 0;
   const lastSan = snap?.moves[moveCount - 1]?.san;
   const heard = useRef<number | null>(null);
+  const lastMover = moveCount === 0 || !snap ? null : snap.position.turn === "white" ? "black" : "white";
+  const opponentMoved = !!snap && lastMover !== null && lastMover !== snap.userSide;
+  const announceMoves = settings.coach.announceMoves;
   useEffect(() => {
-    if (heard.current !== null && moveCount > heard.current) playSound(soundForSan(lastSan));
+    if (heard.current !== null && moveCount > heard.current) {
+      playSound(soundForSan(lastSan));
+      // Say the opponent's moves out loud, if asked to.
+      if (announceMoves && opponentMoved && lastSan) announce(sanToSpeech(lastSan));
+    }
     heard.current = moveCount;
-  }, [moveCount, lastSan]);
+  }, [moveCount, lastSan, announceMoves, opponentMoved]);
+  // The end sound and the automatic review happen once per game, not each
+  // time the tab is shown again (the flags live in the store for that).
+  const flags = usePlay((s) => s.flags[sessionId]);
   useEffect(() => {
-    if (outcomeReason && outcomeReason !== "aborted") playSound("end");
-  }, [outcomeReason]);
+    if (!outcomeReason || outcomeReason === "aborted" || usePlay.getState().flags[sessionId]?.endSoundPlayed) return;
+    usePlay.getState().setFlag(sessionId, "endSoundPlayed");
+    playSound("end");
+  }, [outcomeReason, sessionId]);
 
-  // When a game ends, open its review automatically (once).
-  const reviewOpened = useRef(false);
+  const finishedLongEnough = !!outcomeReason && outcomeReason !== "aborted" && moveCount >= 4;
+  const autoReviewDue = finishedLongEnough && !flags?.reviewOpened;
+  const review = useCallback(async () => {
+    const s = usePlay.getState().snapshots[sessionId];
+    if (!s) return;
+    usePlay.getState().setFlag(sessionId, "reviewOpened");
+    const pgn = await tryCommand(commands.playPgn(sessionId));
+    const gameId = await grandieGameId(s.pgnPath);
+    if (pgn) await openAnalysisFromPgn(pgn, `Review: ${s.whiteName} – ${s.blackName}`, { autoReview: true, atStart: true, gameId });
+  }, [sessionId]);
   useEffect(() => {
-    if (!snap || !outcomeReason || outcomeReason === "aborted" || reviewOpened.current || snap.moves.length < 4) return;
-    reviewOpened.current = true;
+    if (!autoReviewDue) return;
     const t = setTimeout(() => void review(), 900);
     return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [outcomeReason]);
+  }, [autoReviewDue, review]);
 
   const moves = useMemo(
     () =>
@@ -132,9 +146,11 @@ export function PlayScreen({ sessionId }: { sessionId: number }) {
   };
 
   async function move(uci: string): Promise<boolean> {
+    const before = usePlay.getState().snapshots[sessionId];
     try {
       const s = await unwrap(commands.playMove(sessionId, uci));
       usePlay.getState().setSnapshot(s);
+      if (coachMode !== "off" && before) void coachCheck(before.position.fen, before.lastMove, uci, s.moves[s.moves.length - 1]?.san ?? uci);
       return true;
     } catch (e) {
       notifyError("Move not played", e);
@@ -142,12 +158,57 @@ export function PlayScreen({ sessionId }: { sessionId: number }) {
     }
   }
 
+  /** The coach looks at the move just played; mistakes are shown on the board. */
+  async function coachCheck(fenBefore: string, lastMoveBefore: string | null, uci: string, san: string) {
+    const coach = useCoach.getState();
+    setVerdict(null);
+    coach.setLoading(coachOwner, `Looking at ${san}…`);
+    const r = await commands.coachCheckMove(fenBefore, uci, lastMoveBefore, coachMode === "every", null);
+    coach.setLoading(coachOwner, null);
+    if (r.status === "error") {
+      notifyError("The coach couldn't check the move", r.error);
+      return;
+    }
+    setVerdict({ verdict: r.data, san });
+    if (r.data.script) coach.play(r.data.script, coachOwner);
+  }
+
+  function voiceCommand(c: VoiceCommand): boolean {
+    switch (c) {
+      case "takeBack":
+        void takeback();
+        return true;
+      case "hint":
+        void hint();
+        return true;
+      case "flip":
+        nav.flip();
+        return true;
+      case "resign":
+        resign();
+        return true;
+      case "offerDraw":
+        void offerDraw();
+        return true;
+      case "next":
+        nav.forward();
+        return true;
+      case "previous":
+        nav.back();
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  // The hint arrives as part of the next snapshot.
   async function hint() {
-    const best = await tryCommand(commands.playHint(sessionId), "No hint available");
-    if (!best) return;
+    await tryCommand(commands.playHint(sessionId), "No hint available");
   }
 
   async function takeback() {
+    useCoach.getState().stop();
+    setVerdict(null);
     const s = await tryCommand(commands.playTakeback(sessionId), "Takeback refused");
     if (s) usePlay.getState().setSnapshot(s);
   }
@@ -167,13 +228,6 @@ export function PlayScreen({ sessionId }: { sessionId: number }) {
       confirmProps: { color: "red" },
       onConfirm: () => void tryCommand(commands.playResign(sessionId)).then((s) => s && usePlay.getState().setSnapshot(s)),
     });
-  }
-
-  async function review() {
-    reviewOpened.current = true;
-    const pgn = await tryCommand(commands.playPgn(sessionId));
-    const gameId = await grandieGameId(snap!.pgnPath);
-    if (pgn) await openAnalysisFromPgn(pgn, `Review: ${snap!.whiteName} – ${snap!.blackName}`, { autoReview: true, atStart: true, gameId });
   }
 
   async function save() {
@@ -198,15 +252,17 @@ export function PlayScreen({ sessionId }: { sessionId: number }) {
       <div className="board-column" ref={ref}>
         {strip(top)}
         <Board
-          fen={fen}
+          fen={coachBoard.fen ?? fen}
           orientation={orientation}
           turn={snap.position.turn}
-          dests={live ? snap.position.dests : undefined}
-          movableColor={live && !finished ? snap.userSide : undefined}
-          lastMove={lastMove}
-          check={live && snap.position.check}
-          arrows={arrows}
-          premove={live && !finished}
+          dests={live && !coachBoard.active ? snap.position.dests : undefined}
+          movableColor={live && !finished && !coachBoard.active ? snap.userSide : undefined}
+          lastMove={coachBoard.active ? coachBoard.lastMove : lastMove}
+          check={!coachBoard.active && live && snap.position.check}
+          arrows={coachBoard.active ? coachBoard.arrows : arrows}
+          circles={coachBoard.circles}
+          coaching={coachBoard.active}
+          premove={live && !finished && !coachBoard.active}
           coordinates={settings.showCoordinates}
           animationMs={settings.animationMs}
           size={size}
@@ -231,30 +287,43 @@ export function PlayScreen({ sessionId }: { sessionId: number }) {
               {snap.error}
             </Alert>
           )}
+          {verdict && !finished && (
+            <Group gap={6} mt={8} aria-label="Coach verdict">
+              <span className="annot" style={{ color: CLASS_STYLE[verdict.verdict.class].color }}>
+                {CLASS_STYLE[verdict.verdict.class].symbol}
+              </span>
+              <Text size="sm">
+                {verdict.san}: {CLASS_STYLE[verdict.verdict.class].label.toLowerCase()}
+                {verdict.verdict.bestSan && verdict.verdict.class !== "best" && verdict.verdict.class !== "brilliant" && verdict.verdict.class !== "great" ? ` · ${verdict.verdict.bestSan} was best` : ""}
+              </Text>
+              {verdict.verdict.script && snap.canTakeback && (
+                <Button size="compact-xs" variant="light" leftSection={<IconArrowBackUp size={12} />} onClick={() => void takeback()}>
+                  Take back and try again
+                </Button>
+              )}
+            </Group>
+          )}
         </div>
+
+        <CoachPanel
+          owner={coachOwner}
+          fen={() => (userTurn && live ? snap.position.fen : null)}
+          context={() => ({
+            fen: snap.position.fen,
+            recentMoves: snap.moves.slice(-10).map((m) => m.san),
+            game: `your game against ${snap.level.name}`,
+            player: null,
+          })}
+          onVoiceMove={(uci) => void move(uci)}
+          onVoiceCommand={voiceCommand}
+        />
 
         <div className="panel" style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
           <div style={{ flex: 1, minHeight: 0, overflow: "auto", padding: "6px 4px" }}>
             <MoveList moves={moves} current={shownPly - 1} onSelect={(i) => step(i + 1)} />
           </div>
           <Group justify="center" gap={4} p={6} style={{ borderTop: "1px solid var(--hairline)" }}>
-            <ActionIcon variant="subtle" color="gray" onClick={() => step(0)} aria-label="First move">
-              <IconChevronsLeft size={18} />
-            </ActionIcon>
-            <ActionIcon variant="subtle" color="gray" onClick={() => step(shownPly - 1)} aria-label="Previous move">
-              <IconChevronLeft size={18} />
-            </ActionIcon>
-            <ActionIcon variant="subtle" color="gray" onClick={() => step(shownPly + 1)} aria-label="Next move">
-              <IconChevronRight size={18} />
-            </ActionIcon>
-            <ActionIcon variant="subtle" color="gray" onClick={() => step(total)} aria-label="Last move">
-              <IconChevronsRight size={18} />
-            </ActionIcon>
-            <Tooltip label="Flip board (F)">
-              <ActionIcon variant="subtle" color="gray" onClick={() => setView(sessionId, { orientation: orientation === "white" ? "black" : "white" })} aria-label="Flip board">
-                <IconSwitchVertical size={18} />
-              </ActionIcon>
-            </Tooltip>
+            <BoardNavButtons nav={nav} labels={{ start: "First move", back: "Previous move", forward: "Next move", end: "Last move" }} />
           </Group>
         </div>
 

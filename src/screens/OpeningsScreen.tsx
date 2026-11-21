@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ActionIcon, Badge, Button, Group, SegmentedControl, Stack, Text, Title, Tooltip } from "@mantine/core";
-import { useHotkeys } from "@mantine/hooks";
 import { open } from "@tauri-apps/plugin-dialog";
 import { notifications } from "@mantine/notifications";
-import { IconChevronLeft, IconChevronRight, IconChevronsLeft, IconDeviceFloppy, IconFileImport, IconPlus, IconTrash } from "@tabler/icons-react";
+import { IconDeviceFloppy, IconFileImport, IconPlus, IconTrash } from "@tabler/icons-react";
 import { Board, useBoardSize, type Arrow } from "../board/Board";
+import { BoardNavButtons, useBoardNav } from "../board/BoardNav";
+import { sameFen } from "../lib/fen";
 import { commands, notifyError, tryCommand, unwrap, type AppliedMove, type OpeningName, type RepMove, type RepertoireStats, type Side } from "../lib/api";
 import { START_FEN } from "../lib/tree";
 import { primePositionInfo, usePositionInfo } from "../lib/usePositionInfo";
@@ -18,7 +19,6 @@ type Mode = "explore" | "build" | "train";
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
-const sameSpot = (a: string, b: string) => a.split(" ").slice(0, 4).join(" ") === b.split(" ").slice(0, 4).join(" ");
 
 export function OpeningsScreen() {
   const settings = useSettings((s) => s.settings);
@@ -51,7 +51,14 @@ export function OpeningsScreen() {
   }, [refresh]);
 
   useEffect(() => {
-    void commands.openingName(START_FEN, ucis).then(setOpening);
+    let live = true;
+    commands
+      .openingName(START_FEN, ucis)
+      .then((o) => live && setOpening(o))
+      .catch(() => live && setOpening(null));
+    return () => {
+      live = false;
+    };
   }, [ucis]);
 
   const play = useCallback(
@@ -71,14 +78,15 @@ export function OpeningsScreen() {
     [fen, line, cursor],
   );
 
-  useHotkeys([
-    ["ArrowLeft", () => setCursor((c) => Math.max(0, c - 1))],
-    ["ArrowRight", () => setCursor((c) => Math.min(line.length, c + 1))],
-    ["Home", () => setCursor(0)],
-    ["End", () => setCursor(line.length)],
-  ]);
+  const nav = {
+    start: () => setCursor(0),
+    back: () => setCursor((c) => Math.max(0, c - 1)),
+    forward: () => setCursor((c) => Math.min(line.length, c + 1)),
+    end: () => setCursor(line.length),
+  };
+  useBoardNav(nav);
 
-  const here = repMoves.filter((m) => sameSpot(m.parentFen, fen));
+  const here = repMoves.filter((m) => sameFen(m.parentFen, fen));
   const yourTurn = info?.turn === color;
   const arrows: Arrow[] =
     mode === "build" ? here.map((m) => ({ uci: m.uci, brush: yourTurn ? "green" : "blue" })) : [];
@@ -133,15 +141,7 @@ export function OpeningsScreen() {
                 {opening ? `${opening.eco} ${opening.name}` : "Starting position"}
               </Text>
               <Group gap={2}>
-                <ActionIcon variant="subtle" color="gray" onClick={() => setCursor(0)} aria-label="Start">
-                  <IconChevronsLeft size={18} />
-                </ActionIcon>
-                <ActionIcon variant="subtle" color="gray" onClick={() => setCursor(Math.max(0, cursor - 1))} aria-label="Back">
-                  <IconChevronLeft size={18} />
-                </ActionIcon>
-                <ActionIcon variant="subtle" color="gray" onClick={() => setCursor(Math.min(line.length, cursor + 1))} aria-label="Forward">
-                  <IconChevronRight size={18} />
-                </ActionIcon>
+                <BoardNavButtons nav={nav} labels={{ start: "Start", back: "Back", forward: "Forward" }} />
               </Group>
             </Group>
             <Board

@@ -160,6 +160,15 @@ pub fn network_path(networks_dir: &Path, id: &str) -> PathBuf {
     networks_dir.join(format!("{id}.pb.gz"))
 }
 
+/// The small, fast Leela network: a fallback only, never picked by default.
+pub const SMALL_NETWORK_ID: &str = "703810";
+/// The network suggested when no full-strength network is installed.
+pub const RECOMMENDED_NETWORK_ID: &str = "791556";
+
+pub fn is_small_network(id: &str) -> bool {
+    id == SMALL_NETWORK_ID
+}
+
 /// The installed network to use for full-strength work: the user's choice if
 /// installed, otherwise the first installed Leela net in catalog order.
 pub fn resolve_full_network(catalog: &Catalog, networks_dir: &Path, preferred: Option<&str>) -> Option<String> {
@@ -171,8 +180,8 @@ pub fn resolve_full_network(catalog: &Catalog, networks_dir: &Path, preferred: O
     catalog
         .networks
         .iter()
-        .filter(|n| n.kind == NetworkKind::Leela && n.id != "703810")
-        .chain(catalog.networks.iter().filter(|n| n.id == "703810"))
+        .filter(|n| n.kind == NetworkKind::Leela && !is_small_network(&n.id))
+        .chain(catalog.networks.iter().filter(|n| is_small_network(&n.id)))
         .find(|n| network_path(networks_dir, &n.id).exists())
         .map(|n| n.id.clone())
 }

@@ -11,7 +11,7 @@ use shakmaty::{Chess, Color, Position};
 use specta::Type;
 
 use super::accuracy::win_percent;
-use crate::engine::process::{position_command, Engine, SearchResult};
+use crate::engine::process::{position_command, Engine, SearchControl, SearchResult};
 use crate::engine::uci::{InfoLine, Score, Wdl};
 use crate::error::Result;
 use crate::game::position::{fen_of, parse_fen, parse_uci, san_of};
@@ -47,6 +47,8 @@ pub struct AnalysisUpdate {
     pub lines: Vec<AnalysisLine>,
     /// True once the search has stopped.
     pub done: bool,
+    /// Why the search stopped early, if it failed.
+    pub error: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
@@ -76,12 +78,19 @@ pub struct EngineLaunch {
 struct Slot {
     key: String,
     engine: Arc<Engine>,
+}
+
+/// One engine id's state. The token counts requests: a search only runs (and
+/// keeps running) while its token is the newest one.
+#[derive(Default)]
+struct Entry {
     token: Arc<AtomicU64>,
+    slot: tokio::sync::Mutex<Option<Slot>>,
 }
 
 #[derive(Default)]
 pub struct AnalysisManager {
-    slots: tokio::sync::Mutex<HashMap<String, Slot>>,
+    entries: std::sync::Mutex<HashMap<String, Arc<Entry>>>,
 }
 
 /// Convert an engine line to White's point of view, with SAN for the PV.
@@ -124,54 +133,68 @@ pub fn position_after(root_fen: &str, moves: &[String]) -> Result<Chess> {
 }
 
 impl AnalysisManager {
-    async fn engine_for(&self, engine_id: &str, launch: &EngineLaunch) -> Result<(Arc<Engine>, Arc<AtomicU64>)> {
-        let mut slots = self.slots.lock().await;
-        if let Some(slot) = slots.get(engine_id) {
-            if slot.key == launch.key && slot.engine.is_alive() {
-                return Ok((slot.engine.clone(), slot.token.clone()));
+    fn entry(&self, engine_id: &str) -> Arc<Entry> {
+        self.entries.lock().unwrap().entry(engine_id.to_string()).or_default().clone()
+    }
+
+    /// The running engine for an id, (re)started if its launch settings
+    /// changed. Only callers for the same engine wait on a slow start.
+    async fn engine_for(entry: &Entry, launch: &EngineLaunch) -> Result<Arc<Engine>> {
+        let mut slot = entry.slot.lock().await;
+        if let Some(s) = slot.as_ref() {
+            if s.key == launch.key && s.engine.is_alive() {
+                return Ok(s.engine.clone());
             }
         }
-        if let Some(old) = slots.remove(engine_id) {
-            old.token.fetch_add(1, Ordering::SeqCst);
+        if let Some(old) = slot.take() {
             old.engine.quit().await;
         }
-        let engine = Engine::spawn(&launch.path, &[]).await?;
-        for (name, value) in &launch.options {
-            engine.set_option(name, value).await?;
-        }
-        engine.ready(crate::engine::lc0::READY_TIMEOUT).await?;
-        let token = Arc::new(AtomicU64::new(0));
-        slots.insert(engine_id.to_string(), Slot { key: launch.key.clone(), engine: engine.clone(), token: token.clone() });
-        Ok((engine, token))
+        let engine = crate::engine::launch(&launch.path, &launch.options).await?;
+        *slot = Some(Slot { key: launch.key.clone(), engine: engine.clone() });
+        Ok(engine)
     }
 
     /// Start (or restart) infinite analysis of a position.
     pub async fn start(&self, launch: EngineLaunch, req: AnalysisRequest, sink: Arc<dyn AnalysisSink>) -> Result<()> {
         let pos = position_after(&req.root_fen, &req.moves)?;
-        let (engine, token) = self.engine_for(&req.engine_id, &launch).await?;
+        let entry = self.entry(&req.engine_id);
+        let token = entry.token.clone();
         let my_token = token.fetch_add(1, Ordering::SeqCst) + 1;
+        let engine = Self::engine_for(&entry, &launch).await?;
+        if token.load(Ordering::SeqCst) != my_token {
+            return Ok(()); // superseded while the engine was starting
+        }
+        // Stop the previous search now; it would also notice by itself.
         engine.stop().await?;
         let fen = fen_of(&pos);
         if pos.is_game_over() {
-            sink.update(AnalysisUpdate { tab_id: req.tab_id, engine_id: req.engine_id, fen, lines: vec![], done: true });
+            sink.update(AnalysisUpdate { tab_id: req.tab_id, engine_id: req.engine_id, fen, lines: vec![], done: true, error: None });
             return Ok(());
         }
-        let setup = vec![format!("setoption name MultiPV value {}", req.multipv.clamp(1, 8))];
         let position = position_command(&req.root_fen, &req.moves);
+        let ctl = {
+            let token = token.clone();
+            SearchControl {
+                setup: vec![format!("setoption name MultiPV value {}", req.multipv.clamp(1, 8))],
+                cancelled: Some(Box::new(move || token.load(Ordering::SeqCst) != my_token)),
+                timeout: None,
+            }
+        };
         tokio::spawn(async move {
             let mut lines: Vec<AnalysisLine> = Vec::new();
             let mut last_emit = Instant::now() - EMIT_EVERY;
-            let emit = |lines: &[AnalysisLine], done: bool| {
+            let emit = |lines: &[AnalysisLine], done: bool, error: Option<String>| {
                 sink.update(AnalysisUpdate {
                     tab_id: req.tab_id.clone(),
                     engine_id: req.engine_id.clone(),
                     fen: fen.clone(),
                     lines: lines.to_vec(),
                     done,
+                    error,
                 });
             };
             let result: Result<SearchResult> = engine
-                .search_with(&setup, &position, "go infinite", |info| {
+                .search_ctl(&position, "go infinite", &ctl, |info| {
                     if token.load(Ordering::SeqCst) != my_token {
                         return;
                     }
@@ -182,40 +205,59 @@ impl AnalysisManager {
                     }
                     lines[idx] = line;
                     if last_emit.elapsed() >= EMIT_EVERY {
-                        emit(&lines, false);
+                        emit(&lines, false, None);
                         last_emit = Instant::now();
                     }
                 })
                 .await;
             if token.load(Ordering::SeqCst) == my_token {
-                if let Err(e) = &result {
+                let error = result.err().map(|e| {
                     log::warn!("analysis stopped: {e}");
-                }
-                emit(&lines, true);
+                    e.to_string()
+                });
+                emit(&lines, true, error);
             }
         });
         Ok(())
     }
 
     pub async fn stop(&self, engine_id: &str) -> Result<()> {
-        let slots = self.slots.lock().await;
-        if let Some(slot) = slots.get(engine_id) {
-            slot.token.fetch_add(1, Ordering::SeqCst);
-            slot.engine.stop().await?;
+        let entry = self.entry(engine_id);
+        entry.token.fetch_add(1, Ordering::SeqCst);
+        // While the engine is still starting there is nothing to stop: the
+        // bumped token keeps its search from beginning.
+        let engine = entry.slot.try_lock().ok().and_then(|s| s.as_ref().map(|s| s.engine.clone()));
+        if let Some(engine) = engine {
+            engine.stop().await?;
         }
         Ok(())
     }
 
+    /// Stop and quit an engine's process (it was removed or reconfigured).
+    pub async fn close(&self, engine_id: &str) {
+        let entry = self.entries.lock().unwrap().remove(engine_id);
+        if let Some(entry) = entry {
+            entry.token.fetch_add(1, Ordering::SeqCst);
+            if let Some(slot) = entry.slot.lock().await.take() {
+                slot.engine.quit().await;
+            }
+        }
+    }
+
     /// Engine banner (e.g. backend in use) for an engine that has run.
     pub async fn backend_banner(&self, engine_id: &str) -> Option<String> {
-        let slots = self.slots.lock().await;
-        slots.get(engine_id).and_then(|s| crate::engine::lc0::backend_in_use(&s.engine))
+        let entry = self.entry(engine_id);
+        let slot = entry.slot.lock().await;
+        slot.as_ref().and_then(|s| crate::engine::lc0::backend_in_use(&s.engine))
     }
 
     pub fn shutdown(&self) {
-        if let Ok(slots) = self.slots.try_lock() {
-            for slot in slots.values() {
-                slot.engine.kill();
+        for entry in self.entries.lock().unwrap().values() {
+            entry.token.fetch_add(1, Ordering::SeqCst);
+            if let Ok(slot) = entry.slot.try_lock() {
+                if let Some(s) = slot.as_ref() {
+                    s.engine.kill();
+                }
             }
         }
     }

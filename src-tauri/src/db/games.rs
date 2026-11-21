@@ -76,6 +76,14 @@ pub struct GameQuery {
     pub min_rating: Option<i32>,
     pub max_rating: Option<i32>,
     pub position: Option<PositionQuery>,
+    /// "mine" (default) or "masters".
+    pub collection: Option<String>,
+    /// Only games of this master (a catalogue file id like "Carlsen").
+    pub subject: Option<String>,
+    /// With `subject`: only games where the master had this colour.
+    pub subject_color: Option<Side>,
+    /// With `subject`: only games the master won / lost / drew.
+    pub subject_outcome: Option<UserOutcome>,
     pub sort: Option<SortColumn>,
     pub desc: bool,
     pub offset: u32,
@@ -102,10 +110,13 @@ pub struct DbGame {
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct DbStats {
+    /// Games in the user's database (master games not included).
     pub games: u32,
     pub mine: u32,
     pub reviewed: u32,
     pub sources: Vec<(String, u32)>,
+    /// Games in the masters library.
+    pub masters: u32,
 }
 
 const ROW_COLUMNS: &str = "g.id, g.source, g.white, g.black, g.white_elo, g.black_elo, g.result, g.date, g.eco, g.opening,
@@ -151,6 +162,33 @@ fn date_to_secs(d: &str, end: bool) -> Option<i64> {
 fn filters(q: &GameQuery) -> (String, Vec<Value>) {
     let mut clauses: Vec<String> = Vec::new();
     let mut args: Vec<Value> = Vec::new();
+    // The user's own database and the masters library are kept apart.
+    let collection = q.collection.clone().unwrap_or_else(|| if q.subject.is_some() { "masters".into() } else { "mine".into() });
+    clauses.push(format!("g.collection = ?{}", args.len() + 1));
+    args.push(Value::Text(collection));
+    if let Some(subject) = &q.subject {
+        let mut sub = format!("SELECT game_id FROM game_subjects WHERE subject = ?{}", args.len() + 1);
+        args.push(Value::Text(subject.clone()));
+        if let Some(c) = q.subject_color {
+            sub.push_str(&format!(" AND color = ?{}", args.len() + 1));
+            args.push(Value::Text(if c == Side::White { "white" } else { "black" }.into()));
+        }
+        clauses.push(format!("g.id IN ({sub})"));
+        if let Some(o) = q.subject_outcome {
+            let won = "((s.color = 'white' AND g.result = '1-0') OR (s.color = 'black' AND g.result = '0-1'))";
+            let lost = "((s.color = 'white' AND g.result = '0-1') OR (s.color = 'black' AND g.result = '1-0'))";
+            let cond = match o {
+                UserOutcome::Win => won.to_string(),
+                UserOutcome::Loss => lost.to_string(),
+                UserOutcome::Draw => "g.result = '1/2-1/2'".to_string(),
+            };
+            clauses.push(format!(
+                "EXISTS (SELECT 1 FROM game_subjects s WHERE s.game_id = g.id AND s.subject = ?{} AND {cond})",
+                args.len() + 1
+            ));
+            args.push(Value::Text(subject.clone()));
+        }
+    }
     if let Some(text) = q.text.as_deref().map(str::trim).filter(|t| !t.is_empty()) {
         clauses.push(
             "(g.white LIKE ?1 OR g.black LIKE ?1 OR g.event LIKE ?1 OR g.opening LIKE ?1 OR g.eco LIKE ?1)"
@@ -268,7 +306,14 @@ pub fn get(pool: &DbPool, id: i32) -> Result<DbGame> {
         .ok_or_else(|| Error::NotFound(format!("game {id} not found")))?;
     let tree = parse_pgn(&pgn).games.into_iter().next().ok_or_else(|| Error::Chess("stored game is unreadable".into()))?;
     let review: Option<String> = conn.query_row("SELECT data FROM reviews WHERE game_id = ?1", [id], |r| r.get(0)).optional()?;
-    let review = review.and_then(|d| serde_json::from_str(&d).ok());
+    let review = review.and_then(|d| match serde_json::from_str(&d) {
+        Ok(r) => Some(r),
+        Err(e) => {
+            // An older review format: the game opens without it and can be reviewed again.
+            log::warn!("review of game {id} is unreadable: {e}");
+            None
+        }
+    });
     Ok(DbGame { row, tree, review })
 }
 
@@ -295,14 +340,15 @@ pub fn delete(pool: &DbPool, ids: &[i32]) -> Result<u32> {
 pub fn stats(pool: &DbPool) -> Result<DbStats> {
     let conn = pool.get()?;
     let count = |sql: &str| conn.query_row(sql, [], |r| r.get::<_, i64>(0)).map(|n| n as u32);
-    let mut stmt = conn.prepare("SELECT source, COUNT(*) FROM games GROUP BY source ORDER BY COUNT(*) DESC")?;
+    let mut stmt = conn.prepare("SELECT source, COUNT(*) FROM games WHERE collection = 'mine' GROUP BY source ORDER BY COUNT(*) DESC")?;
     let sources =
         stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)? as u32)))?.collect::<rusqlite::Result<Vec<_>>>()?;
     Ok(DbStats {
-        games: count("SELECT COUNT(*) FROM games")?,
+        games: count("SELECT COUNT(*) FROM games WHERE collection = 'mine'")?,
         mine: count("SELECT COUNT(*) FROM games WHERE user_color IS NOT NULL")?,
         reviewed: count("SELECT COUNT(*) FROM reviews")?,
         sources,
+        masters: count("SELECT COUNT(*) FROM games WHERE collection = 'masters'")?,
     })
 }
 

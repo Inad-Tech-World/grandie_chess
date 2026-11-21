@@ -4,6 +4,7 @@
 pub mod explorer;
 pub mod games;
 pub mod import;
+pub mod players;
 pub mod search;
 
 use std::path::Path;
@@ -147,7 +148,104 @@ const MIGRATIONS: &[&str] = &[
         updated_at INTEGER NOT NULL
     );
     "#,
+    // 4: AI coach bookkeeping, and the "learn from your mistakes" deck
+    r#"
+    CREATE TABLE ai_usage (
+        id INTEGER PRIMARY KEY,
+        at INTEGER NOT NULL,
+        model TEXT NOT NULL,
+        purpose TEXT NOT NULL,
+        tokens_in INTEGER NOT NULL DEFAULT 0,
+        tokens_out INTEGER NOT NULL DEFAULT 0,
+        cost REAL
+    );
+    CREATE INDEX ai_usage_at ON ai_usage (at);
+
+    CREATE TABLE coach_cache (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE mistake_cards (
+        id INTEGER PRIMARY KEY,
+        game_id INTEGER REFERENCES games (id) ON DELETE CASCADE,
+        fen TEXT NOT NULL,
+        played TEXT NOT NULL,
+        played_san TEXT NOT NULL,
+        best TEXT NOT NULL,
+        best_san TEXT NOT NULL,
+        best_line TEXT NOT NULL,
+        refutation TEXT NOT NULL,
+        side TEXT NOT NULL,
+        win_before REAL NOT NULL,
+        win_after REAL NOT NULL,
+        due INTEGER NOT NULL,
+        stability REAL NOT NULL DEFAULT 0,
+        difficulty REAL NOT NULL DEFAULT 0,
+        elapsed_days INTEGER NOT NULL DEFAULT 0,
+        scheduled_days INTEGER NOT NULL DEFAULT 0,
+        reps INTEGER NOT NULL DEFAULT 0,
+        lapses INTEGER NOT NULL DEFAULT 0,
+        state INTEGER NOT NULL DEFAULT 0,
+        last_review INTEGER,
+        created_at INTEGER NOT NULL,
+        UNIQUE (fen, played)
+    );
+    CREATE INDEX mistake_cards_due ON mistake_cards (due);
+    "#,
+    // 5: master games (kept apart from the user's own), players, profiles
+    r#"
+    ALTER TABLE games ADD COLUMN collection TEXT NOT NULL DEFAULT 'mine';
+    ALTER TABLE games ADD COLUMN year INTEGER;
+    UPDATE games SET year = CAST(substr(date, 1, 4) AS INTEGER) WHERE date GLOB '[0-9][0-9][0-9][0-9]*';
+    CREATE INDEX games_collection ON games (collection, year);
+
+    CREATE TABLE game_players (
+        game_id INTEGER NOT NULL REFERENCES games (id) ON DELETE CASCADE,
+        color TEXT NOT NULL,
+        player_key TEXT NOT NULL,
+        PRIMARY KEY (game_id, color)
+    );
+    CREATE INDEX game_players_key ON game_players (player_key, color);
+
+    CREATE TABLE game_subjects (
+        game_id INTEGER NOT NULL REFERENCES games (id) ON DELETE CASCADE,
+        subject TEXT NOT NULL,
+        color TEXT,
+        PRIMARY KEY (game_id, subject)
+    );
+    CREATE INDEX game_subjects_subject ON game_subjects (subject, color);
+
+    CREATE TABLE player_profiles (
+        subject TEXT PRIMARY KEY,
+        data TEXT NOT NULL,
+        version INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+    );
+    "#,
 ];
+
+/// Work a migration's SQL can't do, run in the same transaction.
+fn after_migration(version: usize, tx: &rusqlite::Transaction) -> Result<()> {
+    if version == 5 {
+        // Normalised player names for games imported before version 5.
+        let rows: Vec<(i64, Option<String>, Option<String>)> = {
+            let mut stmt = tx.prepare("SELECT id, white, black FROM games")?;
+            let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?.collect::<rusqlite::Result<Vec<_>>>()?;
+            rows
+        };
+        let mut insert = tx.prepare("INSERT OR IGNORE INTO game_players (game_id, color, player_key) VALUES (?1, ?2, ?3)")?;
+        for (id, white, black) in rows {
+            for (color, name) in [("white", white), ("black", black)] {
+                if let Some(key) = name.as_deref().map(players::player_key).filter(|k| !k.is_empty()) {
+                    insert.execute(rusqlite::params![id, color, key])?;
+                }
+            }
+        }
+    }
+    Ok(())
+}
 
 /// Per-connection settings. The busy timeout comes first so a connection waits
 /// for a lock instead of failing.
@@ -174,6 +272,7 @@ pub fn migrate(conn: &mut Connection) -> Result<()> {
     for (i, sql) in MIGRATIONS.iter().enumerate().skip(version) {
         let tx = conn.transaction()?;
         tx.execute_batch(sql)?;
+        after_migration(i + 1, &tx)?;
         tx.pragma_update(None, "user_version", (i + 1) as i64)?;
         tx.commit()?;
         log::info!("database migrated to version {}", i + 1);

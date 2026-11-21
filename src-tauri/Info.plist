@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Merged into the app's Info.plist by Tauri. macOS shows this when the
+	     app first asks for the microphone (hold-to-talk voice input). -->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Grandie Chess listens while you hold the talk button, so you can say your moves and ask the coach questions.</string>
+</dict>
+</plist>

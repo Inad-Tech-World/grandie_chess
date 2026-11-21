@@ -75,3 +75,43 @@ pub struct ImportProgress {
     pub imported: u32,
     pub bytes: f64,
 }
+
+/// The backend changed settings on its own (e.g. picked a default network
+/// after a download); the UI replaces its copy.
+#[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
+pub struct SettingsChanged(pub crate::settings::Settings);
+
+/// Progress of an "Ask the coach" answer, by request id.
+#[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
+#[serde(rename_all = "camelCase")]
+pub struct CoachEvent {
+    pub request_id: String,
+    pub kind: CoachEventKind,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[serde(tag = "type", rename_all = "camelCase")]
+pub enum CoachEventKind {
+    /// More of the answer's text.
+    Delta { text: String },
+    /// The coach is looking something up ("analyse_position", ...).
+    Tool { name: String },
+    /// A line to play on the board.
+    Script { script: crate::coach::script::CoachScript },
+}
+
+/// Delivers scripts from the chat tools to the UI as [`CoachEvent`]s.
+pub struct TauriChatSink {
+    pub app: AppHandle,
+    pub request_id: String,
+}
+
+impl crate::coach::chat::ChatSink for TauriChatSink {
+    fn script(&self, script: crate::coach::script::CoachScript) {
+        let _ = CoachEvent { request_id: self.request_id.clone(), kind: CoachEventKind::Script { script } }.emit(&self.app);
+    }
+}
+
+/// Microphone input level (0..1) while listening.
+#[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
+pub struct VoiceLevel(pub f64);

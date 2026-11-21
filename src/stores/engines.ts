@@ -2,12 +2,14 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { commands, type AnalysisUpdate, type EngineConfig } from "../bindings";
 
-interface TabEngines {
+export interface TabEngines {
   /** Engines switched on for this tab. */
   enabled: string[];
   running: boolean;
   multipv: number;
 }
+
+export const DEFAULT_TAB_ENGINES: TabEngines = { enabled: ["lc0"], running: false, multipv: 3 };
 
 interface EnginesStore {
   engines: EngineConfig[];
@@ -16,16 +18,14 @@ interface EnginesStore {
   tabs: Record<string, TabEngines>;
   refresh: () => Promise<void>;
   onUpdate: (u: AnalysisUpdate) => void;
-  tab: (tabId: string) => TabEngines;
   setTab: (tabId: string, patch: Partial<TabEngines>) => void;
-  clearLines: (tabId: string) => void;
+  /** Forget a closed tab's engine settings and lines. */
+  removeTab: (tabId: string) => void;
 }
-
-const DEFAULT_TAB: TabEngines = { enabled: ["lc0"], running: false, multipv: 3 };
 
 export const useEngines = create<EnginesStore>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       engines: [],
       lines: {},
       tabs: {},
@@ -33,10 +33,13 @@ export const useEngines = create<EnginesStore>()(
         set({ engines: await commands.enginesList() });
       },
       onUpdate: (u) => set((s) => ({ lines: { ...s.lines, [`${u.tabId}:${u.engineId}`]: u } })),
-      tab: (tabId) => get().tabs[tabId] ?? DEFAULT_TAB,
-      setTab: (tabId, patch) => set((s) => ({ tabs: { ...s.tabs, [tabId]: { ...(s.tabs[tabId] ?? DEFAULT_TAB), ...patch } } })),
-      clearLines: (tabId) =>
-        set((s) => ({ lines: Object.fromEntries(Object.entries(s.lines).filter(([k]) => !k.startsWith(`${tabId}:`))) })),
+      setTab: (tabId, patch) => set((s) => ({ tabs: { ...s.tabs, [tabId]: { ...(s.tabs[tabId] ?? DEFAULT_TAB_ENGINES), ...patch } } })),
+      removeTab: (tabId) =>
+        set((s) => {
+          const { [tabId]: _, ...tabs } = s.tabs;
+          const lines = Object.fromEntries(Object.entries(s.lines).filter(([k]) => !k.startsWith(`${tabId}:`)));
+          return { tabs, lines };
+        }),
     }),
     {
       name: "grandie-engines",
@@ -49,12 +52,9 @@ export const useEngines = create<EnginesStore>()(
   ),
 );
 
-export function linesFor(tabId: string, engineId: string, fen: string): AnalysisUpdate | undefined {
-  const u = useEngines.getState().lines[`${tabId}:${engineId}`];
-  return u && sameFen(u.fen, fen) ? u : undefined;
-}
-
-/** Compare FENs ignoring move counters (engines may normalise them). */
-export function sameFen(a: string, b: string): boolean {
-  return a.split(" ").slice(0, 4).join(" ") === b.split(" ").slice(0, 4).join(" ");
+/** Stop every engine switched on for a tab (reads the store now, so engines
+ *  enabled after the caller rendered are included). */
+export function stopTabEngines(tabId: string) {
+  const tab = useEngines.getState().tabs[tabId];
+  for (const engineId of tab?.enabled ?? DEFAULT_TAB_ENGINES.enabled) void commands.analysisStop(engineId);
 }

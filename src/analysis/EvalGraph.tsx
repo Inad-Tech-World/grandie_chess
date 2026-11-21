@@ -1,6 +1,7 @@
 import { Area, AreaChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import type { ReviewResult } from "../bindings";
 import { CLASS_STYLE, formatScore } from "../lib/score";
+import { moveLabel } from "../lib/moveNumber";
 
 interface EvalGraphProps {
   review: ReviewResult;
@@ -21,11 +22,10 @@ interface Point {
 export function EvalGraph({ review, currentPly, onSelectPly }: EvalGraphProps) {
   const data: Point[] = review.evals.map((e) => {
     const move = review.moves[e.ply - 1];
-    const number = Math.ceil(e.ply / 2);
     return {
       ply: e.ply,
       win: Math.round((e.whiteWin ?? 50) * 10) / 10,
-      label: move ? `${number}${move.side === "white" ? "." : "…"} ${move.san}` : "Start",
+      label: move ? moveLabel(review.startFen, e.ply, move.san) : "Start",
       score: formatScore(e.score),
       cls: move?.class,
     };

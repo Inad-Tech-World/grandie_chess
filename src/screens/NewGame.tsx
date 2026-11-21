@@ -1,20 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import {
-  Badge,
-  Button,
-  Card,
-  Group,
-  Modal,
-  NumberInput,
-  Progress,
-  SegmentedControl,
-  Select,
-  Stack,
-  Switch,
-  Text,
-  TextInput,
-  Title,
-} from "@mantine/core";
+import { Badge, Button, Card, Group, Modal, NumberInput, Progress, SegmentedControl, Select, Stack, Switch, Text, TextInput, Title } from "@mantine/core";
 import { IconChessKing, IconChessKingFilled, IconArrowsShuffle, IconPlayerPlay } from "@tabler/icons-react";
 import { commands, notifyError, unwrap, type OpponentLevel, type PlaySetup, type SideChoice, type TimeControl } from "../lib/api";
 import { formatBytes, formatTimeControl } from "../lib/format";
@@ -46,6 +31,8 @@ interface StoredSetup {
   customMinutes: number;
   customIncrement: number;
   takebacks: boolean;
+  /** The coach joins the game (games with the coach are untimed). */
+  coach: "off" | "mistakes" | "every";
 }
 
 const STORAGE_KEY = "grandie-last-setup";
@@ -60,6 +47,7 @@ function loadSetup(): StoredSetup {
     customMinutes: 10,
     customIncrement: 5,
     takebacks: true,
+    coach: "off",
   };
   try {
     return { ...fallback, ...JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}") };
@@ -88,7 +76,10 @@ export function NewGame({ tabId }: { tabId: string }) {
   const [strength, setStrength] = useState<number | null>(null);
 
   useEffect(() => {
-    void commands.levelsList().then(setLevels);
+    commands
+      .levelsList()
+      .then(setLevels)
+      .catch((e) => notifyError("Could not list the opponents", e));
     void refresh();
     void commands.progressSummary().then((r) => {
       const last = r.status === "ok" ? r.data.strength[r.data.strength.length - 1] : undefined;
@@ -131,7 +122,7 @@ export function NewGame({ tabId }: { tabId: string }) {
       return;
     }
     const r = await commands.chessPositionInfo(value);
-    setFenError(r.status === "error" ? r.error : r.data.outcome ? "That position is already finished" : null);
+    setFenError(r.status === "error" ? r.error.message : r.data.outcome ? "That position is already finished" : null);
   }
 
   async function start() {
@@ -145,12 +136,15 @@ export function NewGame({ tabId }: { tabId: string }) {
       const playSetup: PlaySetup = {
         opponent: opponentId,
         userSide: setup.side,
-        timeControl,
+        // The coach pauses to explain, so coached games are untimed and
+        // always allow taking a move back to try again.
+        timeControl: setup.coach !== "off" ? null : timeControl,
         startFen: fenEnabled && fen.trim() ? fen.trim() : null,
-        allowTakebacks: setup.takebacks,
+        allowTakebacks: setup.coach !== "off" || setup.takebacks,
       };
       const snap = await unwrap(commands.playStart(playSetup));
       usePlay.getState().setSnapshot(snap);
+      usePlay.getState().setCoachMode(snap.sessionId, setup.coach);
       replaceTab(tabId, {
         id: tabId,
         kind: "play",
@@ -285,8 +279,29 @@ export function NewGame({ tabId }: { tabId: string }) {
               <NumberInput label="Increment (seconds)" min={0} max={60} value={setup.customIncrement} onChange={(v) => setSetup({ customIncrement: Number(v) || 0 })} />
             </Group>
           )}
+          <div style={{ marginTop: 14 }}>
+            <Text size="sm" fw={500} mb={4}>
+              Coach
+            </Text>
+            <SegmentedControl
+              fullWidth
+              value={setup.coach}
+              onChange={(v) => setSetup({ coach: v as StoredSetup["coach"] })}
+              data={[
+                { value: "off", label: "Off" },
+                { value: "mistakes", label: "After my mistakes" },
+                { value: "every", label: "Every move" },
+              ]}
+              aria-label="Coach"
+            />
+            {setup.coach !== "off" && (
+              <Text size="xs" c="dimmed" mt={4}>
+                The coach shows on the board why a move fails and what was better, then you can take it back and try again. Coached games are untimed.
+              </Text>
+            )}
+          </div>
           <Group mt="md" gap="xl">
-            <Switch label="Allow takebacks" checked={setup.takebacks} onChange={(e) => setSetup({ takebacks: e.currentTarget.checked })} />
+            <Switch label="Allow takebacks" checked={setup.coach !== "off" || setup.takebacks} disabled={setup.coach !== "off"} onChange={(e) => setSetup({ takebacks: e.currentTarget.checked })} />
             <Switch label="Start from a position" checked={fenEnabled} onChange={(e) => setFenEnabled(e.currentTarget.checked)} />
           </Group>
           {fenEnabled && (

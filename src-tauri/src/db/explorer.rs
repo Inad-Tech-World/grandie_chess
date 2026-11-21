@@ -16,10 +16,15 @@ use crate::game::position::{hash_of, parse_fen, parse_uci, san_of, Side};
 pub struct ExplorerMove {
     pub uci: String,
     pub san: String,
-    pub games: u32,
-    pub white: u32,
-    pub draws: u32,
-    pub black: u32,
+    /// Counts are u64: the Lichess database has more games than fit in a u32.
+    #[specta(type = specta_typescript::Number)]
+    pub games: u64,
+    #[specta(type = specta_typescript::Number)]
+    pub white: u64,
+    #[specta(type = specta_typescript::Number)]
+    pub draws: u64,
+    #[specta(type = specta_typescript::Number)]
+    pub black: u64,
     /// Average rating of the players who chose the move.
     pub avg_rating: Option<f64>,
 }
@@ -29,10 +34,14 @@ pub struct ExplorerMove {
 pub struct ExplorerResult {
     pub source: String,
     pub fen: String,
-    pub total: u32,
-    pub white: u32,
-    pub draws: u32,
-    pub black: u32,
+    #[specta(type = specta_typescript::Number)]
+    pub total: u64,
+    #[specta(type = specta_typescript::Number)]
+    pub white: u64,
+    #[specta(type = specta_typescript::Number)]
+    pub draws: u64,
+    #[specta(type = specta_typescript::Number)]
+    pub black: u64,
     pub moves: Vec<ExplorerMove>,
     pub opening: Option<OpeningName>,
 }
@@ -44,6 +53,10 @@ pub struct ExplorerFilter {
     pub only_mine: bool,
     /// Only games where the user had this colour.
     pub color: Option<Side>,
+    /// Only games of this master (catalogue id), from the masters library.
+    pub subject: Option<String>,
+    /// With `subject`: only games where the master had this colour.
+    pub subject_color: Option<Side>,
 }
 
 pub fn explore(pool: &DbPool, fen: &str, filter: &ExplorerFilter) -> Result<ExplorerResult> {
@@ -55,8 +68,21 @@ pub fn explore(pool: &DbPool, fen: &str, filter: &ExplorerFilter) -> Result<Expl
         clauses.push("g.user_color IS NOT NULL".into());
     }
     if let Some(c) = filter.color {
-        clauses.push("g.user_color = ?2".into());
+        clauses.push(format!("g.user_color = ?{}", args.len() + 1));
         args.push(Value::Text(if c == Side::White { "white" } else { "black" }.into()));
+    }
+    match &filter.subject {
+        Some(subject) => {
+            let mut sub = format!("SELECT game_id FROM game_subjects WHERE subject = ?{}", args.len() + 1);
+            args.push(Value::Text(subject.clone()));
+            if let Some(c) = filter.subject_color {
+                sub.push_str(&format!(" AND color = ?{}", args.len() + 1));
+                args.push(Value::Text(if c == Side::White { "white" } else { "black" }.into()));
+            }
+            clauses.push(format!("g.id IN ({sub})"));
+        }
+        // Without a master, the explorer shows the user's own database.
+        None => clauses.push("g.collection = 'mine'".into()),
     }
     // The mover's rating: White's when White is to move, otherwise Black's.
     let mover_elo = if pos.turn().is_white() { "g.white_elo" } else { "g.black_elo" };
@@ -75,10 +101,10 @@ pub fn explore(pool: &DbPool, fen: &str, filter: &ExplorerFilter) -> Result<Expl
     let rows = stmt.query_map(params_from_iter(args.iter()), |r| {
         Ok((
             r.get::<_, String>(0)?,
-            r.get::<_, i64>(1)? as u32,
-            r.get::<_, i64>(2)? as u32,
-            r.get::<_, i64>(3)? as u32,
-            r.get::<_, i64>(4)? as u32,
+            r.get::<_, i64>(1)? as u64,
+            r.get::<_, i64>(2)? as u64,
+            r.get::<_, i64>(3)? as u64,
+            r.get::<_, i64>(4)? as u64,
             r.get::<_, Option<f64>>(5)?,
         ))
     })?;

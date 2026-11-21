@@ -22,6 +22,25 @@ use crate::error::{Error, Result};
 use crate::game::position::START_FEN;
 
 const STDERR_LINES_KEPT: usize = 200;
+/// How often a running search checks whether it is still wanted.
+const CANCEL_POLL: Duration = Duration::from_millis(100);
+/// How long an engine may take to answer `stop` before it counts as hung.
+const STOP_GRACE: Duration = Duration::from_secs(10);
+/// More MultiPV lines than any caller asks for; guards against odd engines.
+const MAX_MULTIPV: usize = 64;
+/// `bestmove` value when there is no move (or the search never started).
+pub const NO_MOVE: &str = "(none)";
+
+/// Extra control over a search.
+#[derive(Default)]
+pub struct SearchControl {
+    /// Commands sent before `position`, once the previous search has finished.
+    pub setup: Vec<String>,
+    /// Polled while searching: once true the search is stopped (or never started).
+    pub cancelled: Option<Box<dyn Fn() -> bool + Send + Sync>>,
+    /// Stop the search after this long; the engine's best move so far is used.
+    pub timeout: Option<Duration>,
+}
 
 /// Result of one `go` command.
 #[derive(Debug, Clone, Default)]
@@ -199,44 +218,79 @@ impl Engine {
     /// Run `position` + `go` and wait for `bestmove`. `on_info` sees every
     /// search line as it arrives. Searches on one engine run one at a time.
     pub async fn search(&self, position: &str, go: &str, on_info: impl FnMut(&InfoLine)) -> Result<SearchResult> {
-        self.search_with(&[], position, go, on_info).await
+        self.search_ctl(position, go, &SearchControl::default(), on_info).await
     }
 
     /// Like [`Engine::search`], but first sends `setup` commands (e.g.
     /// `setoption` for MultiPV) once any previous search has finished, since
     /// UCI doesn't allow changing options mid-search.
-    pub async fn search_with(
+    pub async fn search_with(&self, setup: &[String], position: &str, go: &str, on_info: impl FnMut(&InfoLine)) -> Result<SearchResult> {
+        let ctl = SearchControl { setup: setup.to_vec(), ..Default::default() };
+        self.search_ctl(position, go, &ctl, on_info).await
+    }
+
+    /// The general search. See [`SearchControl`] for cancellation and timeouts.
+    pub async fn search_ctl(
         &self,
-        setup: &[String],
         position: &str,
         go: &str,
+        ctl: &SearchControl,
         mut on_info: impl FnMut(&InfoLine),
     ) -> Result<SearchResult> {
         let _guard = self.search_lock.lock().await;
+        let cancelled = || ctl.cancelled.as_ref().is_some_and(|c| c());
+        // A newer request may have replaced this one while it waited for the
+        // previous search to finish: then don't start at all.
+        if cancelled() {
+            return Ok(SearchResult { best: NO_MOVE.into(), ..Default::default() });
+        }
         let mut rx = self.subscribe();
-        for cmd in setup {
+        for cmd in &ctl.setup {
             self.send(cmd).await?;
         }
         self.send(position).await?;
         self.send(go).await?;
         let mut result = SearchResult::default();
+        let started = tokio::time::Instant::now();
+        let mut stop_sent_at: Option<tokio::time::Instant> = None;
+        let mut poll = tokio::time::interval(CANCEL_POLL);
+        poll.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         loop {
-            match rx.recv().await {
-                Ok(UciMessage::Info(info)) if info.is_search_line() => {
-                    let idx = info.multipv.unwrap_or(1).max(1) as usize - 1;
-                    if result.lines.len() <= idx {
-                        result.lines.resize(idx + 1, InfoLine::default());
+            tokio::select! {
+                msg = rx.recv() => match msg {
+                    Ok(UciMessage::Info(info)) if info.is_search_line() => {
+                        let idx = (info.multipv.unwrap_or(1).max(1) as usize - 1).min(MAX_MULTIPV - 1);
+                        if result.lines.len() <= idx {
+                            result.lines.resize(idx + 1, InfoLine::default());
+                        }
+                        on_info(&info);
+                        result.lines[idx] = info;
                     }
-                    on_info(&info);
-                    result.lines[idx] = info;
+                    Ok(UciMessage::BestMove { best, ponder }) => {
+                        result.best = best;
+                        result.ponder = ponder;
+                        return Ok(result);
+                    }
+                    Ok(UciMessage::Exited) | Err(RecvError::Closed) => return Err(self.exit_error()),
+                    Ok(_) | Err(RecvError::Lagged(_)) => {}
+                },
+                _ = poll.tick() => {
+                    match stop_sent_at {
+                        None => {
+                            let timed_out = ctl.timeout.is_some_and(|t| started.elapsed() >= t);
+                            if cancelled() || timed_out {
+                                // A `stop` sent from elsewhere may have arrived before our
+                                // `go`, so the search stops itself once it is unwanted.
+                                self.send("stop").await?;
+                                stop_sent_at = Some(tokio::time::Instant::now());
+                            }
+                        }
+                        Some(at) if at.elapsed() >= STOP_GRACE => {
+                            return Err(Error::Engine(format!("{} did not stop searching", self.name)));
+                        }
+                        Some(_) => {}
+                    }
                 }
-                Ok(UciMessage::BestMove { best, ponder }) => {
-                    result.best = best;
-                    result.ponder = ponder;
-                    return Ok(result);
-                }
-                Ok(UciMessage::Exited) | Err(RecvError::Closed) => return Err(self.exit_error()),
-                Ok(_) | Err(RecvError::Lagged(_)) => {}
             }
         }
     }
