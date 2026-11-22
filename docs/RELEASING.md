@@ -60,12 +60,22 @@ To remove the warning, sign with an Authenticode certificate, for example throug
 
 ## Making a release
 
-1. Bump the version in `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` and `package.json` (they must match).
-2. Commit, then tag and push:
+1. Set the new version in `package.json`, `src-tauri/tauri.conf.json` and `src-tauri/Cargo.toml`. All three must match, and the tag must be `v` plus that version. Installed copies compare their own version with `latest.json`, so a release that still carries the old version number is never offered to them. The workflow's `check-version` job stops a mismatched tag before anything is built.
+2. Refresh the lockfile, commit, then tag and push (here for 0.4.0):
 
    ```sh
-   git tag v0.2.0
-   git push origin main v0.2.0
+   (cd src-tauri && cargo metadata --format-version 1 > /dev/null)
+   git commit -am "Release 0.4.0"
+   git tag v0.4.0
+   git push origin main v0.4.0
+   ```
+
+   Pushed a tag before bumping the version? Delete the draft release on GitHub (if the workflow made one), then move the tag to the bump commit:
+
+   ```sh
+   git push origin :refs/tags/v0.4.0
+   git tag -f v0.4.0
+   git push origin main v0.4.0
    ```
 
 3. Wait for the **Release** workflow. It builds universal lc0, the macOS app and the DMG, and the Windows installer, signs the update bundles, and creates a draft release with:

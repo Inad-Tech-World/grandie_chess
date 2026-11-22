@@ -1,6 +1,6 @@
 [package]
 name = "grandie-chess"
-version = "0.1.0"
+version = "0.3.0"
 description = "Grandie Chess: a chess training app powered by Leela Chess Zero"
 authors = ["Grandie Chess contributors"]
 license = "GPL-3.0-or-later"

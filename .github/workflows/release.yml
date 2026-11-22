@@ -18,7 +18,30 @@ env:
     publisher, choose More info → Run anyway.
 
 jobs:
+  # The tag must match the app's version: installed copies compare their own
+  # version with latest.json, so a release still marked as the old version is
+  # never offered to them. Fails in seconds, before the long builds.
+  check-version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tag matches the version in package.json, tauri.conf.json and Cargo.toml
+        run: |
+          npm_v=$(jq -r .version package.json)
+          tauri_v=$(jq -r .version src-tauri/tauri.conf.json)
+          cargo_v=$(sed -n 's/^version = "\(.*\)"/\1/p' src-tauri/Cargo.toml | head -1)
+          echo "package.json $npm_v, tauri.conf.json $tauri_v, Cargo.toml $cargo_v"
+          if [ "$npm_v" != "$tauri_v" ] || [ "$npm_v" != "$cargo_v" ]; then
+            echo "::error::The three version numbers differ. Set them all to the same version."
+            exit 1
+          fi
+          if [ "$GITHUB_REF_TYPE" = tag ] && [ "$GITHUB_REF_NAME" != "v$npm_v" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME doesn't match the app version $npm_v. Bump the version (docs/RELEASING.md), commit, and tag v$npm_v."
+            exit 1
+          fi
+
   release-macos:
+    needs: check-version
     runs-on: macos-15
     timeout-minutes: 120
     steps:
@@ -105,6 +128,7 @@ jobs:
           gh release upload "${{ github.ref_name }}" "$RUNNER_TEMP/Grandie-Chess.dmg" --clobber
 
   release-windows:
+    needs: check-version
     runs-on: windows-latest
     timeout-minutes: 90
     defaults:
