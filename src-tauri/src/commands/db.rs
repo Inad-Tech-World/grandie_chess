@@ -1,5 +1,7 @@
 //! The game database, imports, openings and the explorers.
 
+use serde::Serialize;
+use specta::Type;
 use tauri::{AppHandle, State};
 use tauri_specta::Event;
 
@@ -187,7 +189,8 @@ pub async fn explorer_db(state: State<'_, AppState>, fen: String, filter: Explor
     blocking(move || crate::db::explorer::explore(&pool, &fen, &filter)).await
 }
 
-/// Moves from the Lichess explorer ("lichess" or "masters"); needs a Lichess token.
+/// Moves from the Lichess explorer ("lichess" or "masters"). Uses the user's
+/// own Lichess token if they saved one, otherwise the one built into the app.
 #[tauri::command]
 #[specta::specta]
 pub async fn explorer_lichess(
@@ -197,16 +200,27 @@ pub async fn explorer_lichess(
     speeds: Vec<String>,
     ratings: Vec<u32>,
 ) -> Result<ExplorerResult> {
-    let token = blocking(crate::secrets::lichess_token)
+    let (token, source) = blocking(|| Ok(crate::secrets::lichess_token()))
         .await?
         .ok_or_else(|| Error::NotFound("Add a Lichess API token in Settings to use the Lichess explorer.".into()))?;
-    crate::net::explorer::explore(&state.http, &state.explorer_cache, &token, &db, &fen, &speeds, &ratings).await
+    crate::net::explorer::explore(&state.http, &state.explorer_cache, (&token, source), &db, &fen, &speeds, &ratings).await
+}
+
+/// Which Lichess tokens this copy of the app has.
+#[derive(Debug, Clone, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LichessTokenStatus {
+    /// The user saved their own token.
+    pub own: bool,
+    /// The app was built with a token of its own, used when the user has none.
+    pub built_in: bool,
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn lichess_token_status() -> Result<bool> {
-    Ok(blocking(crate::secrets::lichess_token).await?.is_some())
+pub async fn lichess_token_status() -> Result<LichessTokenStatus> {
+    let own = blocking(crate::secrets::has_own_lichess_token).await.unwrap_or(false);
+    Ok(LichessTokenStatus { own, built_in: crate::secrets::built_in_lichess_token().is_some() })
 }
 
 /// Store (or with an empty string, remove) the Lichess API token in the system

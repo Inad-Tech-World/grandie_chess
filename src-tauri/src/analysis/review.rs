@@ -19,21 +19,30 @@ use crate::game::position::{fen_of, material_balance, parse_fen, parse_uci, san_
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub enum ReviewDepth {
+    /// A rough pass over many games at once (a master's style). Not offered
+    /// for single games.
+    Sketch,
     Quick,
     Standard,
     Deep,
 }
 
 impl ReviewDepth {
-    /// `go` command per position. lc0 is limited by nodes; other engines by depth.
+    /// `go` command per position. lc0 is limited by nodes; other engines by
+    /// depth and time.
     pub fn go_command(self, lc0: bool) -> &'static str {
         match (self, lc0) {
+            (ReviewDepth::Sketch, true) => "go nodes 100",
             (ReviewDepth::Quick, true) => "go nodes 200",
             (ReviewDepth::Standard, true) => "go nodes 800",
             (ReviewDepth::Deep, true) => "go nodes 3000",
-            (ReviewDepth::Quick, false) => "go depth 14",
-            (ReviewDepth::Standard, false) => "go depth 18",
-            (ReviewDepth::Deep, false) => "go depth 22",
+            // A depth alone doesn't bound the time: in sharp positions (long
+            // forced mates, many checks) Stockfish's depth-14 search can take
+            // 30 s instead of 0.5 s. Whichever limit comes first ends it.
+            (ReviewDepth::Sketch, false) => "go depth 10 movetime 250",
+            (ReviewDepth::Quick, false) => "go depth 14 movetime 1000",
+            (ReviewDepth::Standard, false) => "go depth 18 movetime 2500",
+            (ReviewDepth::Deep, false) => "go depth 22 movetime 6000",
         }
     }
 }
@@ -105,7 +114,15 @@ pub struct ReviewResult {
 const POSITION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
 
 /// Evaluate one position (terminal positions are scored by the rules).
-async fn evaluate(engine: &Engine, start_fen: &str, moves: &[String], pos: &Chess, ply: u32, go: &str) -> Result<PositionEval> {
+async fn evaluate(
+    engine: &Engine,
+    start_fen: &str,
+    moves: &[String],
+    pos: &Chess,
+    ply: u32,
+    go: &str,
+    cancel: &Arc<AtomicBool>,
+) -> Result<PositionEval> {
     let fen = fen_of(pos);
     if pos.is_checkmate() {
         let white_win = if pos.turn() == Color::White { 0.0 } else { 100.0 };
@@ -132,8 +149,17 @@ async fn evaluate(engine: &Engine, start_fen: &str, moves: &[String], pos: &Ches
             second_white_win: None,
         });
     }
-    let ctl = SearchControl { timeout: Some(POSITION_TIMEOUT), ..Default::default() };
+    // Cancelling stops the search in progress too, not just the next one.
+    let flag = cancel.clone();
+    let ctl = SearchControl {
+        timeout: Some(POSITION_TIMEOUT),
+        cancelled: Some(Box::new(move || flag.load(Ordering::SeqCst))),
+        ..Default::default()
+    };
     let result = engine.search_ctl(&position_command(start_fen, moves), go, &ctl, |_| {}).await?;
+    if result.lines.is_empty() && cancel.load(Ordering::SeqCst) {
+        return Err(Error::Cancelled);
+    }
     let top = result.lines.first().ok_or_else(|| Error::Engine("engine returned no evaluation".into()))?;
     let line = to_white_line(top, pos);
     let second = result.lines.get(1).filter(|l| !l.pv.is_empty()).map(|l| to_white_line(l, pos));
@@ -255,7 +281,11 @@ pub async fn run(
     position_after(start_fen, moves)?; // validate the whole game first
     engine.send("ucinewgame").await?;
     engine.set_option("MultiPV", 2).await?;
-    engine.set_option("UCI_ShowWDL", "true").await?;
+    // Win/draw/loss figures only from lc0; other engines' centipawns use the
+    // human-calibrated curve (see AppState::launch_for).
+    if lc0 {
+        engine.set_option("UCI_ShowWDL", "true").await?;
+    }
     let go = depth.go_command(lc0);
     let total = moves.len() as u32 + 1;
     let mut pos = parse_fen(start_fen)?;
@@ -265,7 +295,11 @@ pub async fn run(
             return Err(Error::Cancelled);
         }
         let played = &moves[..ply as usize];
-        evals.push(evaluate(engine, start_fen, played, &pos, ply, go).await?);
+        let eval = evaluate(engine, start_fen, played, &pos, ply, go, &cancel).await?;
+        if cancel.load(Ordering::SeqCst) {
+            return Err(Error::Cancelled);
+        }
+        evals.push(eval);
         progress(ply + 1, total);
         if let Some(uci) = moves.get(ply as usize) {
             let m = parse_uci(&pos, uci)?;

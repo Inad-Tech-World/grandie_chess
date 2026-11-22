@@ -1,7 +1,7 @@
 {
   "name": "grandie-chess",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Grandie Chess: a chess training app powered by Leela Chess Zero",
   "license": "GPL-3.0-or-later",
   "type": "module",

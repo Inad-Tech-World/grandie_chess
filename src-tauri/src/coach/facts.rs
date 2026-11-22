@@ -156,8 +156,14 @@ pub fn line_facts(pos: &Chess, sans: &[String]) -> LineFacts {
     let start = material_for(pos, mover);
     let mut p = pos.clone();
     let mut facts = LineFacts::default();
+    // Material before the line's last move, in case that move is a capture
+    // the line stops before answering.
+    let mut before_last = start;
+    let mut last_capture_on = None;
     for (i, san) in sans.iter().enumerate() {
         let Ok(m) = parse_san(&p, san) else { break };
+        before_last = material_for(&p, mover);
+        last_capture_on = m.capture().map(|_| m.to());
         if let Some(captured) = m.capture() {
             facts.captures.push(format!("{} takes the {}", san_of(&p, m), role_name(captured)));
         }
@@ -175,6 +181,17 @@ pub fn line_facts(pos: &Chess, sans: &[String]) -> LineFacts {
     }
     facts.mate = p.is_checkmate();
     facts.material_change = material_for(&p, mover) - start;
+    // A line that stops right after a capture the other side can answer by
+    // taking back stops mid-exchange, so only count what holds either way.
+    let can_take_back = last_capture_on.is_some_and(|sq| !p.board().attacks_to(sq, p.turn(), p.board().occupied()).is_empty());
+    if can_take_back && !facts.mate {
+        let earlier = before_last - start;
+        if earlier.signum() != facts.material_change.signum() {
+            facts.material_change = 0;
+        } else if earlier.abs() < facts.material_change.abs() {
+            facts.material_change = earlier;
+        }
+    }
     for color in [Color::White, Color::Black] {
         for h in hanging(&p, color) {
             facts.hanging_after.push((color_name(color).to_string(), h));
@@ -239,6 +256,21 @@ mod tests {
         let pos = parse_fen("r1bqkbnr/pp2pppp/2np4/1Bp5/4P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 0 4").unwrap();
         let p = pinned(&pos, Color::Black);
         assert_eq!(p, vec![(PieceAt { role: "knight", square: "c6".into() }, "king")]);
+    }
+
+    #[test]
+    fn a_line_cut_mid_exchange_claims_no_material() {
+        // 1.e4 d5: after exd5 Qxd5 Nc3 the line could stop at ...Qxd5, with
+        // White's pawn taken back. Cut after exd5 alone it looks like a pawn
+        // won, but d5 can be taken back, so it isn't claimed.
+        let pos = parse_fen("rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2").unwrap();
+        let line = |sans: &[&str]| line_facts(&pos, &sans.iter().map(|s| s.to_string()).collect::<Vec<_>>());
+        assert_eq!(line(&["exd5"]).material_change, 0);
+        assert_eq!(line(&["exd5", "Qxd5"]).material_change, 0);
+        assert_eq!(line(&["exd5", "Qxd5", "Nc3"]).material_change, 0);
+        // A clean capture still counts: 2.Ba6?? Nxa6, and a6 can't be retaken.
+        let f = line(&["Ba6", "Nxa6"]);
+        assert_eq!(f.material_change, -3);
     }
 
     #[test]

@@ -164,7 +164,7 @@ pub async fn masters_analyse_style(
             &format!("{style_id}:{i}"),
             &start,
             &moves,
-            ReviewDepth::Quick,
+            ReviewDepth::Sketch,
             Some(&coach.engine_id),
         )
         .await;
@@ -300,7 +300,13 @@ pub async fn masters_walkthrough(app: AppHandle, state: State<'_, AppState>, req
             };
             (side, name.unwrap_or_else(|| request.subject.clone().unwrap_or_default()))
         }
-        None => (None, "both players".to_string()),
+        // A famous game without a chosen player: follow the winner. In a
+        // draw the coach follows both sides and calls them by colour.
+        None => match game.row.result.as_str() {
+            "1-0" => (Some(Side::White), game.row.white.clone().unwrap_or_default()),
+            "0-1" => (Some(Side::Black), game.row.black.clone().unwrap_or_default()),
+            _ => (None, String::new()),
+        },
     };
     let year = game.row.date.as_deref().and_then(|d| d.get(..4)).unwrap_or("").trim_matches('?').to_string();
     let title = format!(

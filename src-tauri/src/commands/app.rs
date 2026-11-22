@@ -71,3 +71,28 @@ pub fn settings_get(state: State<'_, AppState>) -> Settings {
 pub fn settings_set(state: State<'_, AppState>, settings: Settings) -> Result<()> {
     state.set_settings(settings)
 }
+
+/// An error in the UI (a screen that failed to draw, an unhandled promise),
+/// written to the log and to `errors.log` in the app's log folder
+/// (`~/Library/Logs/com.grandie.chess` on macOS) so it can be reported.
+#[tauri::command]
+#[specta::specta]
+pub async fn app_log_error(app: tauri::AppHandle, context: String, message: String) -> Result<()> {
+    use std::io::Write;
+    use tauri::Manager;
+    let message: String = message.chars().take(8000).collect();
+    log::error!("[ui] {context}: {message}");
+    let Ok(dir) = app.path().app_log_dir() else { return Ok(()) };
+    super::blocking(move || {
+        std::fs::create_dir_all(&dir)?;
+        let path = dir.join("errors.log");
+        // Keep it small: past 1 MB the old file is set aside and a new one begun.
+        if std::fs::metadata(&path).map(|m| m.len() > 1_000_000).unwrap_or(false) {
+            let _ = std::fs::rename(&path, dir.join("errors.old.log"));
+        }
+        let mut file = std::fs::OpenOptions::new().create(true).append(true).open(&path)?;
+        writeln!(file, "{} [{}] {context}: {message}", chrono::Local::now().format("%Y-%m-%d %H:%M:%S"), env!("CARGO_PKG_VERSION"))?;
+        Ok(())
+    })
+    .await
+}

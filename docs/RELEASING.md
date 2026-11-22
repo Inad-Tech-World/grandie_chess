@@ -58,6 +58,16 @@ Windows builds are currently **unsigned**. They install and run, but SmartScreen
 
 To remove the warning, sign with an Authenticode certificate, for example through Azure Trusted Signing or an OV/EV certificate, using Tauri's `bundle.windows.signCommand` in `src-tauri/tauri.windows.conf.json` and adding the credentials as Actions secrets.
 
+### 4. Built-in Lichess token (recommended)
+
+The opening explorer's Lichess and Masters databases only answer requests with a Lichess API token. Release builds put one into the app so users don't need their own. Add it as an Actions secret:
+
+| Secret | Value |
+|---|---|
+| `LICHESS_TOKEN` | a Lichess personal API token (`lip_…`, no scopes needed) |
+
+With the GitHub CLI: `gh secret set LICHESS_TOKEN`. The token never goes into the repository: the repository is public, and GitHub's secret scanning reports Lichess tokens it finds. In the app it is stored lightly scrambled, which keeps it out of plain-text scans of the binary but doesn't stop a determined person from extracting it; everyone using the app shares its rate limit. If Lichess ever revokes it, the explorer asks users to add their own token, and a new one only needs the secret updated and a new release. Without the secret, the `check-version` job warns and the release ships without a built-in token.
+
 ## Making a release
 
 1. Set the new version in `package.json`, `src-tauri/tauri.conf.json` and `src-tauri/Cargo.toml`. All three must match, and the tag must be `v` plus that version. Installed copies compare their own version with `latest.json`, so a release that still carries the old version number is never offered to them. The workflow's `check-version` job stops a mismatched tag before anything is built.

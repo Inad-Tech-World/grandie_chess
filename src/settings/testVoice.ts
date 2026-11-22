@@ -3,6 +3,7 @@
 
 import type { VoiceOutput } from "../bindings";
 import { commands, unwrap } from "../lib/api";
+import { findVoice } from "../coach/voices";
 import { systemSpeechSupported } from "./useSystemVoices";
 
 export const SAMPLE_SENTENCE = "Knight to f3. Developing a piece and controlling the centre.";
@@ -27,7 +28,7 @@ function speakSystem(text: string, voiceName: string | null, rate: number): Prom
   const synth = window.speechSynthesis;
   synth.cancel();
   const u = new SpeechSynthesisUtterance(text);
-  const voice = voiceName ? synth.getVoices().find((v) => v.name === voiceName) : undefined;
+  const voice = findVoice(synth.getVoices(), voiceName);
   if (voice) u.voice = voice;
   u.rate = Math.min(2, Math.max(0.5, rate || 1));
   return new Promise((resolve, reject) => {

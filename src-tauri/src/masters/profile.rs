@@ -155,7 +155,10 @@ struct Row {
 }
 
 /// (colour, ECO letter, opening family).
-type OpeningKey = (String, Option<String>, String);
+/// (colour, opening family).
+type OpeningKey = (String, String);
+/// (games, points, ECO letter).
+type OpeningTally = (u32, f64, Option<String>);
 
 /// Statistics over every game of the master `id` in the library.
 pub fn stats(pool: &DbPool, id: &str) -> Result<PlayerStats> {
@@ -183,7 +186,7 @@ pub fn stats(pool: &DbPool, id: &str) -> Result<PlayerStats> {
         .collect::<rusqlite::Result<_>>()?;
     let name = super::catalog_player(id).map(|(_, n)| n).unwrap_or_else(|| id.to_string());
     let mut out = PlayerStats { id: id.to_string(), name, games: rows.len() as u32, ..Default::default() };
-    let mut openings: HashMap<OpeningKey, (u32, f64)> = HashMap::new();
+    let mut openings: HashMap<OpeningKey, OpeningTally> = HashMap::new();
     let mut first: HashMap<String, (u32, f64)> = HashMap::new();
     let mut vs_e4: HashMap<String, (u32, f64)> = HashMap::new();
     let mut vs_d4: HashMap<String, (u32, f64)> = HashMap::new();
@@ -218,9 +221,14 @@ pub fn stats(pool: &DbPool, id: &str) -> Result<PlayerStats> {
         if let Some(name) = r.opening.clone().filter(|n| !n.is_empty()) {
             // Group by the family ("Sicilian Defense: Najdorf" -> "Sicilian Defense").
             let family = name.split(':').next().unwrap_or(&name).trim().to_string();
-            let e = openings.entry((r.color.clone(), r.eco.as_ref().map(|e| e.chars().take(1).collect()), family)).or_default();
+            // Keyed by colour and family only: some games have no ECO code,
+            // and the same family shouldn't be listed twice because of it.
+            let e = openings.entry((r.color.clone(), family)).or_default();
             e.0 += 1;
             e.1 += p;
+            if e.2.is_none() {
+                e.2 = r.eco.as_ref().map(|e| e.chars().take(1).collect());
+            }
         }
         if let Some(opp) = r.opponent.clone().filter(|o| !o.trim().is_empty()) {
             let e = opponents.entry(opp).or_default();
@@ -269,9 +277,9 @@ pub fn stats(pool: &DbPool, id: &str) -> Result<PlayerStats> {
     out.first_moves = top(first, 5);
     out.vs_e4 = top(vs_e4, 5);
     out.vs_d4 = top(vs_d4, 5);
-    let mut ops: Vec<(OpeningKey, (u32, f64))> = openings.into_iter().collect();
-    ops.sort_by(|a, b| b.1 .0.cmp(&a.1 .0).then(a.0 .2.cmp(&b.0 .2)));
-    for ((color, eco, name), (g, p)) in ops {
+    let mut ops: Vec<(OpeningKey, OpeningTally)> = openings.into_iter().collect();
+    ops.sort_by(|a, b| b.1 .0.cmp(&a.1 .0).then(a.0 .1.cmp(&b.0 .1)));
+    for ((color, name), (g, p, eco)) in ops {
         let list = if color == "white" { &mut out.openings_white } else { &mut out.openings_black };
         if list.len() < 8 {
             list.push(MasterOpeningStat { eco, name, games: g, score: pct(p, g) });

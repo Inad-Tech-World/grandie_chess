@@ -27,3 +27,6 @@ src-tauri/binaries/
 
 # Updater signing keys must never be committed
 *.key
+
+# The Lichess token built into local builds (see src-tauri/build.rs). Never commit it.
+src-tauri/.lichess-token

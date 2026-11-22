@@ -96,6 +96,9 @@ export function Board(props: BoardProps) {
     if (!el.current) return;
     const cg = Chessground(el.current, {
       ...config,
+      // Development builds accept scripted mouse events, so the real app can
+      // be driven end to end (src-tauri/src/dev_driver.rs).
+      trustAllEvents: import.meta.env.DEV,
       movable: {
         ...config.movable,
         events: {

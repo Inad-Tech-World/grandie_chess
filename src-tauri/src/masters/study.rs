@@ -72,8 +72,21 @@ fn pick_moments(review: &ReviewResult, master: Option<Side>, max: usize) -> Vec<
     chosen
 }
 
-/// Plays moves between moments; jumps instead when there are too many.
+/// What the coach calls a player: "McDonnell, Alexander" and "Alexander
+/// McDonnell" are both "McDonnell".
+fn surname(name: &str) -> String {
+    let name = name.trim();
+    match name.split_once(',') {
+        Some((last, _)) if !last.trim().is_empty() => last.trim().to_string(),
+        _ => name.split_whitespace().last().unwrap_or(name).to_string(),
+    }
+}
+
+/// Plays moves between moments; jumps ahead instead when there are too many.
 const REPLAY_GAP: usize = 14;
+/// After a jump, the moves played out before the next moment (or the end),
+/// so the build-up to it, like a final combination, is always shown.
+const LEAD_IN: usize = 8;
 
 /// A guided replay of a master game.
 #[allow(clippy::too_many_arguments)]
@@ -90,25 +103,34 @@ pub fn walkthrough_script(
 ) -> Result<(CoachScript, NarrationContext)> {
     let moments = pick_moments(review, master, 6);
     let mut b = ScriptBuilder::new(start_fen, None)?;
-    let short = master_name.split_whitespace().last().unwrap_or(master_name).to_string();
-    b.say(SayRole::Intro, format!("{title}. Let's watch how {short} plays it; I'll stop at the moments that matter."));
+    let short = surname(master_name);
+    // Who made a move, as the coach says it: the master's name, or the
+    // colour when following both sides.
+    let who = |side: Side| if master.is_some() && !short.is_empty() { short.clone() } else { color_name(Color::from(side)).to_string() };
+    if master.is_some() && !short.is_empty() {
+        b.say(SayRole::Intro, format!("{title}. Let's watch how {short} plays it; I'll stop at the moments that matter."));
+    } else {
+        b.say(SayRole::Intro, format!("{title}. Let's watch this game; I'll stop at the moments that matter."));
+    }
     let mut ply = 0usize;
     let mut allowed: Vec<String> = Vec::new();
     let mut facts = Vec::new();
     let play_to = |b: &mut ScriptBuilder, from: usize, to: usize| -> Result<()> {
+        let mut from = from;
         if to.saturating_sub(from) > REPLAY_GAP {
-            let fen = review.evals.get(to).map(|e| e.fen.clone()).unwrap_or_default();
-            let last = to.checked_sub(1).and_then(|i| moves.get(i).cloned());
+            let resume = to - LEAD_IN;
+            let fen = review.evals.get(resume).map(|e| e.fen.clone()).unwrap_or_default();
+            let last = resume.checked_sub(1).and_then(|i| moves.get(i).cloned());
             b.reset(&fen, last)?;
             let pos = parse_fen(&fen)?;
             b.say(SayRole::Moment, format!("Skipping ahead to move {}.", pos.fullmoves()));
-        } else {
-            for uci in &moves[from..to] {
-                let pos = b.position().clone();
-                if let Ok(m) = parse_uci(&pos, uci) {
-                    b.play_san(&san_of(&pos, m));
-                    b.pause(250);
-                }
+            from = resume;
+        }
+        for uci in &moves[from..to] {
+            let pos = b.position().clone();
+            if let Ok(m) = parse_uci(&pos, uci) {
+                b.play_san(&san_of(&pos, m));
+                b.pause(250);
             }
         }
         Ok(())
@@ -121,10 +143,16 @@ pub fn walkthrough_script(
         let label = numbered(&pos, &r.san);
         let reply = review.evals.get(i + 1).map(|e| e.line.clone()).unwrap_or_default();
         b.shapes(CoachShape::arrow(&r.uci, if m.kind == MomentKind::Slip { "red" } else { "green" }).into_iter().collect());
+        let short = who(r.side);
         let intro = match m.kind {
             MomentKind::Masterstroke => format!(
                 "{label}! {short} finds {}.",
-                if r.class == MoveClass::Brilliant { "a brilliant sacrifice" } else { "the only move that keeps the advantage" }
+                match (r.class, r.win_after) {
+                    (MoveClass::Brilliant, _) => "a brilliant sacrifice",
+                    (_, w) if w >= 62.0 => "the only move that keeps the advantage",
+                    (_, w) if w > 38.0 => "the only move that holds the balance",
+                    _ => "the toughest defence",
+                }
             ),
             MomentKind::Punish => {
                 let prev = &review.moves[i - 1];
@@ -134,7 +162,14 @@ pub fn walkthrough_script(
                 "{label}. The engine slightly prefers {}, but {short}'s move has a clear plan.",
                 r.best_san.clone().unwrap_or_default()
             ),
-            MomentKind::Slip => format!("Even {short} slips here: {label} lets the advantage go."),
+            MomentKind::Slip => format!(
+                "Even {short} slips here: {label} {}.",
+                match r.win_before {
+                    w if w >= 62.0 => "lets the advantage go",
+                    w if w > 38.0 => "hands the opponent the better game",
+                    _ => "makes a difficult position worse",
+                }
+            ),
         };
         b.say(SayRole::Moment, intro);
         b.play_san(&r.san);
@@ -144,13 +179,13 @@ pub fn walkthrough_script(
         if !reply.is_empty() {
             let mover = Color::from(r.side);
             let what = if f.mate {
-                "and the attack ends in mate.".to_string()
+                "the attack ends in mate.".to_string()
             } else if -f.material_change >= 1 {
-                format!("winning material for {}.", color_name(mover))
+                format!("{} wins material.", color_name(mover))
             } else {
-                format!("and {} stays {}.", color_name(mover), eval_words(r.win_after))
+                format!("{} stays {}.", color_name(mover), eval_words(r.win_after))
             };
-            b.say(SayRole::Idea, format!("The point: after {}, the game goes on {what}", reply.first().cloned().unwrap_or_default()));
+            b.say(SayRole::Idea, format!("The point: after {}, {what}", reply.first().cloned().unwrap_or_default()));
             let n = b.play_line(&reply, 4);
             b.back(n);
         }
@@ -182,6 +217,7 @@ pub fn walkthrough_script(
         ("1-0", Some(Side::Black)) | ("0-1", Some(Side::White)) => format!("{short} lost this one, but there's a lot to learn from it."),
         _ => "That's the game.".to_string(),
     };
+    let outcome = if b.position().is_checkmate() { format!("Checkmate. {outcome}") } else { outcome };
     b.say(SayRole::Summary, outcome);
     let final_fen = review.evals.last().map(|e| e.fen.clone()).unwrap_or_else(|| b.fen());
     let script = b.finish(id, &coach.id, title.to_string(), final_fen, moves.last().cloned());
@@ -233,7 +269,7 @@ pub fn guess_script(
     let pos = parse_fen(fen)?;
     let san = |uci: &str| parse_uci(&pos, uci).map(|m| san_of(&pos, m)).unwrap_or_else(|_| uci.to_string());
     let (guess_san, master_san) = (san(&guess.played), san(&master.played));
-    let short = master_name.split_whitespace().last().unwrap_or(master_name).to_string();
+    let short = surname(master_name);
     if guess.played == master.played {
         return Ok((
             GuessResult {
@@ -343,6 +379,14 @@ pub fn style_report_prompt(stats: &super::profile::PlayerStats, language: &str) 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn calls_players_by_surname() {
+        assert_eq!(surname("McDonnell, Alexander"), "McDonnell");
+        assert_eq!(surname("Alexander McDonnell"), "McDonnell");
+        assert_eq!(surname("Tal"), "Tal");
+        assert_eq!(surname("NN"), "NN");
+    }
     use crate::analysis::review::{PositionEval, SideSummary};
     use crate::game::position::START_FEN;
 

@@ -203,25 +203,41 @@ fn puzzle_from(r: &rusqlite::Row) -> rusqlite::Result<Puzzle> {
 
 /// A random puzzle near `rating`, optionally with a theme, avoiding `exclude`.
 /// The rating window widens until something is found.
+///
+/// The pick is one index lookup: a random point (rating, rowid) in the window,
+/// then the first suitable puzzle after it, wrapping round to the window's
+/// start. `ORDER BY random()` instead read and sorted every puzzle in the
+/// window (about 340,000 near 1500) for each puzzle, which took seconds.
 pub fn next(pool: &DbPool, rating: f64, theme: Option<&str>, exclude: &[String]) -> Result<Option<Puzzle>> {
     let conn = pool.get()?;
+    let max_rowid: i64 = conn.query_row("SELECT COALESCE(max(rowid), 0) FROM puzzles", [], |r| r.get(0))?;
+    if max_rowid == 0 {
+        return Ok(None);
+    }
     for window in [75.0, 150.0, 300.0, 600.0, 3000.0] {
-        let mut sql = "SELECT id, fen, moves, rating, deviation, popularity, plays, themes, game_url, opening
-                       FROM puzzles WHERE rating BETWEEN ?1 AND ?2"
-            .to_string();
-        let mut args: Vec<Value> = vec![Value::Integer((rating - window) as i64), Value::Integer((rating + window) as i64)];
-        if let Some(t) = theme.filter(|t| !t.is_empty()) {
-            sql.push_str(&format!(" AND themes LIKE ?{}", args.len() + 1));
-            args.push(Value::Text(format!("% {t} %")));
-        }
-        if !exclude.is_empty() {
-            let marks: Vec<String> = (0..exclude.len()).map(|i| format!("?{}", args.len() + 1 + i)).collect();
-            sql.push_str(&format!(" AND id NOT IN ({})", marks.join(",")));
-            args.extend(exclude.iter().map(|e| Value::Text(e.clone())));
-        }
-        sql.push_str(" ORDER BY random() LIMIT 1");
-        if let Some(p) = conn.query_row(&sql, params_from_iter(args.iter()), puzzle_from).optional()? {
-            return Ok(Some(p));
+        let (lo, hi) = ((rating - window) as i64, (rating + window) as i64);
+        let start = (rand::random_range(lo..=hi), rand::random_range(1..=max_rowid));
+        // After the random point, then (wrapping round) before it.
+        for after in [true, false] {
+            let mut sql = format!(
+                "SELECT id, fen, moves, rating, deviation, popularity, plays, themes, game_url, opening
+                 FROM puzzles WHERE rating BETWEEN ?1 AND ?2 AND (rating, rowid) {} (?3, ?4)",
+                if after { ">=" } else { "<" }
+            );
+            let mut args: Vec<Value> = vec![Value::Integer(lo), Value::Integer(hi), Value::Integer(start.0), Value::Integer(start.1)];
+            if let Some(t) = theme.filter(|t| !t.is_empty()) {
+                sql.push_str(&format!(" AND themes LIKE ?{}", args.len() + 1));
+                args.push(Value::Text(format!("% {t} %")));
+            }
+            if !exclude.is_empty() {
+                let marks: Vec<String> = (0..exclude.len()).map(|i| format!("?{}", args.len() + 1 + i)).collect();
+                sql.push_str(&format!(" AND id NOT IN ({})", marks.join(",")));
+                args.extend(exclude.iter().map(|e| Value::Text(e.clone())));
+            }
+            sql.push_str(" ORDER BY rating, rowid LIMIT 1");
+            if let Some(p) = conn.query_row(&sql, params_from_iter(args.iter()), puzzle_from).optional()? {
+                return Ok(Some(p));
+            }
         }
     }
     Ok(None)
@@ -339,6 +355,40 @@ LOWPOP,8/8/8/8/8/8/8/K6k w - - 0 1,a1a2 h1h2,900,80,10,5,endgame,,,
         assert_eq!(endgame.id, "0000D", "theme filter widens the rating window");
         let none = next(&pool, 1500.0, Some("endgame"), &["0000D".into()]).unwrap();
         assert!(none.is_none());
+    }
+
+    #[test]
+    fn picks_vary_stay_in_the_window_and_wrap_round() {
+        let dir = tempfile::tempdir().unwrap();
+        let pool = open(&dir.path().join("p.db")).unwrap();
+        {
+            let conn = pool.get().unwrap();
+            for i in 0..300 {
+                let theme = if i % 10 == 0 { "fork" } else { "short" };
+                conn.execute(
+                    "INSERT INTO puzzles (id, fen, moves, rating, deviation, popularity, plays, themes) VALUES (?1, ?2, 'e2e4 e7e5', ?3, 75, 90, 100, ?4)",
+                    rusqlite::params![format!("p{i:03}"), crate::game::position::START_FEN, 1400 + (i % 200), format!(" {theme} ")],
+                )
+                .unwrap();
+            }
+        }
+        let mut seen = std::collections::HashSet::new();
+        for _ in 0..40 {
+            let p = next(&pool, 1500.0, None, &[]).unwrap().unwrap();
+            assert!((1425..=1575).contains(&p.rating), "{} is outside 1500 ± 75", p.rating);
+            seen.insert(p.id);
+        }
+        assert!(seen.len() >= 10, "only {} different puzzles in 40 picks", seen.len());
+        for _ in 0..20 {
+            let p = next(&pool, 1500.0, Some("fork"), &[]).unwrap().unwrap();
+            assert!(p.themes.contains(&"fork".to_string()));
+        }
+        // Everything but one puzzle excluded: whichever random point is
+        // chosen, the search wraps round and finds it.
+        let all_but_one: Vec<String> = (0..300).filter(|&i| i != 123).map(|i| format!("p{i:03}")).collect();
+        for _ in 0..10 {
+            assert_eq!(next(&pool, 1500.0, None, &all_but_one).unwrap().unwrap().id, "p123");
+        }
     }
 
     #[test]

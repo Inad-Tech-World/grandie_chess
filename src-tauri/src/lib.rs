@@ -16,6 +16,8 @@ pub mod training;
 pub mod voice;
 
 mod commands;
+#[cfg(debug_assertions)]
+mod dev_driver;
 mod events;
 mod menu;
 mod state;
@@ -29,6 +31,7 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
     tauri_specta::Builder::<tauri::Wry>::new()
         .commands(collect_commands![
             commands::app::app_info,
+            commands::app::app_log_error,
             commands::ai::ai_key_status,
             commands::ai::ai_key_set,
             commands::ai::ai_key_info,
@@ -167,11 +170,20 @@ pub fn run() {
         .invoke_handler(builder.invoke_handler())
         .setup(move |app| {
             builder.mount_events(app);
-            let data_dir = app.path().app_data_dir()?;
+            // Debug builds can run on another data folder, e.g. a copy of a
+            // real one for testing (GRANDIE_DATA_DIR).
+            let data_dir = match std::env::var_os("GRANDIE_DATA_DIR").filter(|_| cfg!(debug_assertions)) {
+                Some(dir) => std::path::PathBuf::from(dir),
+                None => app.path().app_data_dir()?,
+            };
             let state = state::AppState::new(data_dir).map_err(|e| e.to_string())?;
             log::info!("data folder: {}", state.paths.data_dir.display());
             app.manage(state);
             menu::install(app)?;
+            #[cfg(debug_assertions)]
+            if let Some(dir) = std::env::var_os("GRANDIE_DEV_DRIVER") {
+                dev_driver::start(app.handle(), dir.into());
+            }
             Ok(())
         })
         .build(tauri::generate_context!())

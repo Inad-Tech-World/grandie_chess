@@ -115,6 +115,30 @@ fn plural(n: i32, word: &str) -> String {
     }
 }
 
+/// What a move cost, in words: the change of verdict, or, when the verdict
+/// stays the same ("about equal" both times), how much of the winning
+/// chances went.
+fn what_it_costs(win_before: f64, win_after: f64) -> String {
+    let (before, after) = (eval_words(win_before), eval_words(win_after));
+    if before != after {
+        return format!("Your position goes from {before} to {after}.");
+    }
+    let lost = (win_before - win_after).round().max(1.0);
+    format!("Your position is still {before}, but your winning chances drop by about {lost:.0}%.")
+}
+
+/// Material won, in the words a coach would use ("a piece", "the queen").
+fn material_words(n: i32) -> String {
+    match n.abs() {
+        1 => "a pawn".into(),
+        3 => "a piece".into(),
+        4 => "a piece and a pawn".into(),
+        5 => "a rook".into(),
+        9 => "the queen".into(),
+        n => format!("{} of material", plural(n, "pawn")),
+    }
+}
+
 /// What a line achieves, in one sentence, from its first mover's view.
 fn line_outcome(f: &LineFacts, mover: Color) -> Option<String> {
     let them = color_name(!mover);
@@ -122,7 +146,7 @@ fn line_outcome(f: &LineFacts, mover: Color) -> Option<String> {
         return Some("and that's checkmate.".into());
     }
     if f.material_change >= 1 {
-        return Some(format!("winning {} of material.", plural(f.material_change, "pawn")));
+        return Some(format!("winning {}.", material_words(f.material_change)));
     }
     if f.material_change <= -2 {
         return Some(format!("giving up material, but {them} has to be careful."));
@@ -178,12 +202,7 @@ pub fn explain_move_script(
     if error {
         b.say(
             SayRole::Intro,
-            format!(
-                "{label} is {}. Your position goes from {} to {}. Let's see why.",
-                class_words(ctx.class),
-                eval_words(ctx.win_before),
-                eval_words(ctx.win_after)
-            ),
+            format!("{label} is {}. {} Let's see why.", class_words(ctx.class), what_it_costs(ctx.win_before, ctx.win_after)),
         );
         b.play_san(&played_san);
         b.clear_shapes();

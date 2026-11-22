@@ -69,7 +69,8 @@ pub struct CoachSettings {
     pub coach_id: Option<String>,
     pub verbosity: Verbosity,
     pub voice_output: VoiceOutput,
-    /// Name of the system voice; `None` uses the default voice.
+    /// The system voice (its voiceURI; older versions stored its name).
+    /// `None` uses the default voice.
     pub system_voice: Option<String>,
     /// Speaking speed, 0.5..2.0.
     pub speech_rate: f64,

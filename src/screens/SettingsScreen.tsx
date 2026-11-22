@@ -24,6 +24,8 @@ export function SettingsScreen() {
   const { settings, update } = useSettings();
   const [info, setInfo] = useState<AppInfo | null>(null);
   const [hasToken, setHasToken] = useState(false);
+  // The app was built with its own Lichess token, so the explorer works without one.
+  const [builtInToken, setBuiltInToken] = useState(false);
   const [token, setToken] = useState("");
   // Typing and dragging save once the user pauses, not on every keystroke.
   const [playerName, setPlayerName] = useDebouncedField(settings.playerName, (v) => void update({ playerName: v }));
@@ -37,7 +39,11 @@ export function SettingsScreen() {
       .appInfo()
       .then(setInfo)
       .catch((e) => notifyError("Could not read the app details", e));
-    void commands.lichessTokenStatus().then((r) => r.status === "ok" && setHasToken(r.data));
+    void commands.lichessTokenStatus().then((r) => {
+      if (r.status !== "ok") return;
+      setHasToken(r.data.own);
+      setBuiltInToken(r.data.builtIn);
+    });
   }, []);
 
   async function saveToken(value: string) {
@@ -179,10 +185,16 @@ export function SettingsScreen() {
         <Card withBorder radius="lg" padding="lg">
           <Group justify="space-between" mb="sm">
             <Text fw={600}>Accounts</Text>
-            {hasToken && (
+            {hasToken ? (
               <Badge color="green" variant="light">
-                Lichess token saved
+                Your Lichess token saved
               </Badge>
+            ) : (
+              builtInToken && (
+                <Badge color="green" variant="light">
+                  Lichess explorer ready
+                </Badge>
+              )
             )}
           </Group>
           <Stack gap="sm">
@@ -203,8 +215,12 @@ export function SettingsScreen() {
             </Text>
             <Group align="flex-end" gap="xs">
               <PasswordInput
-                label="Lichess API token"
-                description="Needed for the Lichess and Masters opening explorer. No permissions are required."
+                label={builtInToken ? "Your own Lichess API token (optional)" : "Lichess API token"}
+                description={
+                  builtInToken
+                    ? "The opening explorer already works with the app's built-in access, which everyone shares. Add your own only if Lichess says it's busy. No permissions are needed."
+                    : "Needed for the Lichess and Masters opening explorer. No permissions are required."
+                }
                 placeholder={hasToken ? "•••••• (saved)" : "lip_…"}
                 value={token}
                 onChange={(e) => setToken(e.currentTarget.value)}

@@ -269,7 +269,11 @@ pub async fn coach_walk_game(
             steps.push(CoachStep::Say {
                 id: "w0".into(),
                 role: SayRole::Moment,
-                text: format!("Let's go through the {} key moments of this game.", plies.len()),
+                text: if plies.len() == 1 {
+                    "Let's look at the key moment of this game.".to_string()
+                } else {
+                    format!("Let's go through the {} key moments of this game.", plies.len())
+                },
             });
         }
         for step in sub.steps {

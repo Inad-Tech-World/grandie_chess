@@ -80,6 +80,9 @@ Other useful commands:
 | `cd src-tauri && cargo run --profile perf -p grandie-dev-tools --bin calibrate -- --a leela-4 --b maia-1500` | Estimate an opponent level's rating with engine matches |
 | `pnpm tauri build --target universal-apple-darwin` | Build the universal app and DMG |
 | `pnpm tauri build` (on Windows) | Build the Windows installer (`src-tauri\target\release\bundle\nsis\`) |
+| `GRANDIE_DATA_DIR=<copy> GRANDIE_DEV_DRIVER=<dir> pnpm tauri dev` | Debug builds only: run on a copy of a data folder, and accept scripts from `scripts/drive.py <dir> '<js>'` to drive the real app end to end (see `src-tauri/src/dev_driver.rs`) |
+
+**Lichess token.** The Lichess and Masters opening explorer needs a Lichess API token. To build one into the app (so users don't need their own), put it in `src-tauri/.lichess-token` (ignored by git) or the `GRANDIE_LICHESS_TOKEN` environment variable before building; release builds take it from the `LICHESS_TOKEN` Actions secret. Users can still save their own in Settings → Accounts, which takes precedence.
 
 See [`engine/BENCHMARKS.md`](engine/BENCHMARKS.md) for engine speed on an Intel Mac, and [`docs/RELEASING.md`](docs/RELEASING.md) for signing, notarisation and auto-updates.
 

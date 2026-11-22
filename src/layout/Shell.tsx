@@ -1,5 +1,6 @@
 import { Button, Group, Image, Stack, Text, Title } from "@mantine/core";
 import { IconMicroscope, IconPlayerPlay } from "@tabler/icons-react";
+import { ErrorBoundary } from "./ErrorBoundary";
 import { Sidebar } from "./Sidebar";
 import { TabBar } from "./TabBar";
 import { useApp } from "../stores/app";
@@ -49,20 +50,26 @@ function Boards() {
 
 export function Shell() {
   const section = useApp((s) => s.section);
+  const activeTabId = useApp((s) => s.activeTabId);
+  // A new screen (or board tab) gets a fresh boundary, so an error on one
+  // screen doesn't stay up after switching to another.
+  const screen = section === "boards" ? `boards:${activeTabId ?? "welcome"}` : section;
   return (
     <div className="app">
       <Sidebar />
       <main className="main">
         <TabBar />
         <div className="content">
-          {section === "boards" && <Boards />}
-          {section === "engines" && <EnginesScreen />}
-          {section === "settings" && <SettingsScreen />}
-          {section === "database" && <DatabaseScreen />}
-          {section === "openings" && <OpeningsScreen />}
-          {section === "masters" && <MastersScreen />}
-          {section === "puzzles" && <PuzzlesScreen />}
-          {section === "progress" && <ProgressScreen />}
+          <ErrorBoundary key={screen} name={screen}>
+            {section === "boards" && <Boards />}
+            {section === "engines" && <EnginesScreen />}
+            {section === "settings" && <SettingsScreen />}
+            {section === "database" && <DatabaseScreen />}
+            {section === "openings" && <OpeningsScreen />}
+            {section === "masters" && <MastersScreen />}
+            {section === "puzzles" && <PuzzlesScreen />}
+            {section === "progress" && <ProgressScreen />}
+          </ErrorBoundary>
         </div>
       </main>
     </div>

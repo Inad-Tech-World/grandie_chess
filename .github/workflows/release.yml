@@ -26,6 +26,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Tag matches the version in package.json, tauri.conf.json and Cargo.toml
+        env:
+          LICHESS_TOKEN: ${{ secrets.LICHESS_TOKEN }}
         run: |
           npm_v=$(jq -r .version package.json)
           tauri_v=$(jq -r .version src-tauri/tauri.conf.json)
@@ -34,6 +36,9 @@ jobs:
           if [ "$npm_v" != "$tauri_v" ] || [ "$npm_v" != "$cargo_v" ]; then
             echo "::error::The three version numbers differ. Set them all to the same version."
             exit 1
+          fi
+          if [ -z "$LICHESS_TOKEN" ]; then
+            echo "::warning::No LICHESS_TOKEN secret: this release has no built-in Lichess token, so users must add their own for the opening explorer (docs/RELEASING.md)."
           fi
           if [ "$GITHUB_REF_TYPE" = tag ] && [ "$GITHUB_REF_NAME" != "v$npm_v" ]; then
             echo "::error::Tag $GITHUB_REF_NAME doesn't match the app version $npm_v. Bump the version (docs/RELEASING.md), commit, and tag v$npm_v."
@@ -108,6 +113,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # The Lichess token built into the app for the opening explorer
+          # (src-tauri/build.rs). Never in the repository.
+          GRANDIE_LICHESS_TOKEN: ${{ secrets.LICHESS_TOKEN }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: Grandie Chess ${{ github.ref_name }}
@@ -163,6 +171,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # The Lichess token built into the app for the opening explorer
+          # (src-tauri/build.rs). Never in the repository.
+          GRANDIE_LICHESS_TOKEN: ${{ secrets.LICHESS_TOKEN }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: Grandie Chess ${{ github.ref_name }}

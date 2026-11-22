@@ -75,3 +75,29 @@ test("onboarding offers Stockfish alongside the networks", async ({ page }) => {
   await page.getByRole("button", { name: /^Download/ }).click();
   await expect(page.getByText(/times your/)).toBeVisible();
 });
+
+test("settings open with the computer's voices as macOS lists them", async ({ page }) => {
+  // WebKit on macOS gives many voices the same name in different languages
+  // and lists some twice; the voice picker used to crash the screen on that.
+  await page.addInitScript(() => {
+    const voice = (name: string, lang: string, voiceURI: string) => ({ name, lang, voiceURI, localService: true, default: false });
+    const list = [
+      voice("Eddy", "en-US", "com.apple.eloquence.en-US.Eddy"),
+      voice("Eddy", "de-DE", "com.apple.eloquence.de-DE.Eddy"),
+      voice("Daniel", "en-GB", "com.apple.voice.compact.en-GB.Daniel"),
+      voice("Daniel", "en-GB", "com.apple.voice.compact.en-GB.Daniel"),
+      voice("Anna", "de-DE", "com.apple.voice.compact.de-DE.Anna"),
+    ];
+    Object.defineProperty(window.speechSynthesis, "getVoices", { value: () => list });
+  });
+  await page.reload();
+  await openSettings(page);
+  await expect(page.getByRole("alert").filter({ hasText: "ran into a problem" })).toHaveCount(0);
+  await page.getByRole("combobox", { name: "Voice", exact: true }).click();
+  await expect(page.getByRole("option", { name: "Daniel (en-GB)" })).toHaveCount(1);
+  await expect(page.getByRole("option", { name: "Anna (de-DE)" })).toHaveCount(0);
+  await page.getByRole("option", { name: "Daniel (en-GB)" }).click();
+  await expect(page.getByRole("combobox", { name: "Voice", exact: true })).toHaveValue("Daniel (en-GB)");
+  const uiErrors = await page.evaluate(() => (window as unknown as { __GRANDIE_MOCK_STATS__: { uiErrors: string[] } }).__GRANDIE_MOCK_STATS__.uiErrors);
+  expect(uiErrors).toEqual([]);
+});

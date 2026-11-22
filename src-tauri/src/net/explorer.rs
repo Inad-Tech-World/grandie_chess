@@ -69,7 +69,7 @@ impl ExplorerCache {
 pub async fn explore(
     client: &reqwest::Client,
     cache: &ExplorerCache,
-    token: &str,
+    (token, source): (&str, crate::secrets::TokenSource),
     db: &str,
     fen: &str,
     speeds: &[String],
@@ -99,9 +99,20 @@ pub async fn explore(
     let url = reqwest::Url::parse_with_params(&format!("https://explorer.lichess.ovh/{db}"), &query)
         .map_err(|e| Error::other(format!("bad explorer URL: {e}")))?;
     let response = client.get(url).bearer_auth(token).send().await?;
+    let built_in = source == crate::secrets::TokenSource::BuiltIn;
     match response.status() {
+        StatusCode::UNAUTHORIZED if built_in => {
+            return Err(Error::other(
+                "Lichess no longer accepts the app's built-in access. Add your own Lichess API token in Settings → Accounts.",
+            ));
+        }
         StatusCode::UNAUTHORIZED => {
             return Err(Error::other("Lichess rejected the API token. Check it in Settings."));
+        }
+        StatusCode::TOO_MANY_REQUESTS if built_in => {
+            return Err(Error::other(
+                "The Lichess explorer is busy (the app's built-in access is shared). Wait a minute, or add your own Lichess API token in Settings → Accounts.",
+            ));
         }
         StatusCode::TOO_MANY_REQUESTS => {
             return Err(Error::other("The Lichess explorer is rate-limiting requests; wait a minute and try again."));

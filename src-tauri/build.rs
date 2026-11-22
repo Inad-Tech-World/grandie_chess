@@ -9,7 +9,37 @@ fn main() {
         attributes = attributes.windows_attributes(tauri_build::WindowsAttributes::new_without_app_manifest());
         embed_windows_manifest(&std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("windows-app-manifest.xml"));
     }
+    embed_lichess_token();
     tauri_build::try_build(attributes).expect("failed to run tauri-build");
+}
+
+/// Builds in the Lichess token the opening explorer uses when the user hasn't
+/// saved their own. It comes from the GRANDIE_LICHESS_TOKEN environment
+/// variable (release builds: an Actions secret) or the untracked file
+/// src-tauri/.lichess-token (local builds), and is never committed. It's
+/// stored scrambled with the key in src/secrets.rs, so the binary doesn't
+/// contain it as plain text. Without either, the app asks users for a token.
+fn embed_lichess_token() {
+    const SCRAMBLE: &[u8] = b"grandie-chess:explorer";
+    println!("cargo:rerun-if-env-changed=GRANDIE_LICHESS_TOKEN");
+    let file = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(".lichess-token");
+    // Only watch the file if it exists: Cargo reruns the script on every
+    // build for a missing one. (After creating it, `touch build.rs`.)
+    if file.exists() {
+        println!("cargo:rerun-if-changed={}", file.display());
+    }
+    let token = std::env::var("GRANDIE_LICHESS_TOKEN")
+        .ok()
+        .or_else(|| std::fs::read_to_string(&file).ok())
+        .map(|t| t.trim().to_string())
+        .filter(|t| !t.is_empty());
+    let Some(token) = token else { return };
+    if !token.starts_with("lip_") || token.contains(char::is_whitespace) {
+        println!("cargo:warning=GRANDIE_LICHESS_TOKEN doesn't look like a Lichess token (lip_…); not built in");
+        return;
+    }
+    let hex: String = token.bytes().zip(SCRAMBLE.iter().cycle()).map(|(b, k)| format!("{:02x}", b ^ k)).collect();
+    println!("cargo:rustc-env=GRANDIE_LICHESS_TOKEN_X={hex}");
 }
 
 /// Embeds `manifest` in every program this package links (the app and its tests).

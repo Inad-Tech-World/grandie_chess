@@ -8,6 +8,12 @@ import * as __TAURI_EVENT from "@tauri-apps/api/event";
 /** Commands */
 export const commands = {
 	appInfo: () => __TAURI_INVOKE<AppInfo>("app_info"),
+	/**
+	 *  An error in the UI (a screen that failed to draw, an unhandled promise),
+	 *  written to the log and to `errors.log` in the app's log folder
+	 *  (`~/Library/Logs/com.grandie.chess` on macOS) so it can be reported.
+	 */
+	appLogError: (context: string, message: string) => typedError<null, ErrorPayload>(__TAURI_INVOKE("app_log_error", { context, message })),
 	aiKeyStatus: () => typedError<boolean, ErrorPayload>(__TAURI_INVOKE("ai_key_status")),
 	/**
 	 *  Save (or with an empty string, remove) the OpenRouter key in the system
@@ -164,9 +170,12 @@ export const commands = {
 	name: string,
 } | null>("opening_name", { rootFen, moves }),
 	explorerDb: (fen: string, filter: ExplorerFilter) => typedError<ExplorerResult, ErrorPayload>(__TAURI_INVOKE("explorer_db", { fen, filter })),
-	/**  Moves from the Lichess explorer ("lichess" or "masters"); needs a Lichess token. */
+	/**
+	 *  Moves from the Lichess explorer ("lichess" or "masters"). Uses the user's
+	 *  own Lichess token if they saved one, otherwise the one built into the app.
+	 */
 	explorerLichess: (db: string, fen: string, speeds: string[], ratings: number[]) => typedError<ExplorerResult, ErrorPayload>(__TAURI_INVOKE("explorer_lichess", { db, fen, speeds, ratings })),
-	lichessTokenStatus: () => typedError<boolean, ErrorPayload>(__TAURI_INVOKE("lichess_token_status")),
+	lichessTokenStatus: () => typedError<LichessTokenStatus, ErrorPayload>(__TAURI_INVOKE("lichess_token_status")),
 	/**
 	 *  Store (or with an empty string, remove) the Lichess API token in the system
 	 *  credential store (the Keychain on macOS, Credential Manager on Windows).
@@ -447,7 +456,10 @@ export type CoachSettings = {
 	coachId?: string | null,
 	verbosity?: Verbosity,
 	voiceOutput?: VoiceOutput,
-	/**  Name of the system voice; `None` uses the default voice. */
+	/**
+	 *  The system voice (its voiceURI; older versions stored its name).
+	 *  `None` uses the default voice.
+	 */
 	systemVoice?: string | null,
 	/**  Speaking speed, 0.5..2.0. */
 	speechRate?: number | null,
@@ -780,6 +792,14 @@ export type LevelSeries = {
 	name: string,
 	elo: number | null,
 	points: RatingPoint[],
+};
+
+/**  Which Lichess tokens this copy of the app has. */
+export type LichessTokenStatus = {
+	/**  The user saved their own token. */
+	own: boolean,
+	/**  The app was built with a token of its own, used when the user has none. */
+	builtIn: boolean,
 };
 
 export type MasterMoveStat = {
@@ -1129,7 +1149,12 @@ export type RepertoireStats = {
 	nextDue: number | null,
 };
 
-export type ReviewDepth = "quick" | "standard" | "deep";
+export type ReviewDepth = 
+/**
+ *  A rough pass over many games at once (a master's style). Not offered
+ *  for single games.
+ */
+"sketch" | "quick" | "standard" | "deep";
 
 /**  Progress of a full-game review. */
 export type ReviewProgress = {

@@ -7,6 +7,7 @@
 
 import { commands } from "../bindings";
 import { useSettings } from "../stores/settings";
+import { findVoice } from "./voices";
 
 export interface Speaker {
   /** Speak a line; resolves when it has finished (or was cancelled). */
@@ -65,7 +66,7 @@ class SystemSpeaker implements Speaker {
       if (signal.aborted) return resolve();
       const synth = window.speechSynthesis;
       const u = new SpeechSynthesisUtterance(text);
-      const voice = this.voiceName ? synth.getVoices().find((v) => v.name === this.voiceName) : undefined;
+      const voice = findVoice(synth.getVoices(), this.voiceName);
       if (voice) u.voice = voice;
       u.rate = this.rate;
       let done = false;

@@ -27,6 +27,7 @@ import { CoachSelect } from "./CoachSelect";
 import { COACH_LANGUAGES, updateAi, updateCoach } from "./coachSettings";
 import { ModelSelect } from "./ModelSelect";
 import { ReviewEngineSelect } from "./ReviewEngineSelect";
+import { findVoice, uniqueVoices, voiceId, voiceOptions } from "../coach/voices";
 import { speakSample } from "./testVoice";
 import { systemSpeechSupported, useSystemVoices } from "./useSystemVoices";
 
@@ -46,7 +47,8 @@ function VoicePicker() {
   }, [ttsModel]);
 
   if (coach.voiceOutput === "cloud") {
-    const data = [...(cloudVoices ?? [])];
+    // Unique: the select refuses repeated options.
+    const data = [...new Set(cloudVoices ?? [])];
     if (ai.ttsVoice && !data.includes(ai.ttsVoice)) data.unshift(ai.ttsVoice);
     return (
       <Select
@@ -75,14 +77,15 @@ function VoicePicker() {
       </Text>
     );
   }
-  const data = [{ value: "", label: "Default voice" }, ...voices.map((v) => ({ value: v.name, label: `${v.name} (${v.lang})` }))];
+  const data = voiceOptions(voices, coach.language ?? "English", coach.systemVoice);
+  const current = findVoice(uniqueVoices(voices), coach.systemVoice);
   return (
     <Select
       label="Voice"
       searchable
       allowDeselect={false}
       data={data}
-      value={coach.systemVoice ?? ""}
+      value={current ? voiceId(current) : ""}
       onChange={(v) => void updateCoach({ systemVoice: v || null })}
       nothingFoundMessage="No voice by that name"
     />

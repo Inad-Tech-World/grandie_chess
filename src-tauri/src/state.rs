@@ -154,10 +154,11 @@ impl AppState {
             }
             EngineKind::Uci => {
                 let path = PathBuf::from(config.path.clone().ok_or_else(|| Error::other("engine has no path"))?);
-                let mut options: Vec<(String, String)> = config.options.iter().map(|o| (o.name.clone(), o.value.clone())).collect();
-                if config.available_options.iter().any(|o| o.name == "UCI_ShowWDL") {
-                    options.push(("UCI_ShowWDL".into(), "true".into()));
-                }
+                // No UCI_ShowWDL: Stockfish's win/draw/loss figures are
+                // calibrated for engine play (+1 pawn is already a 50% win), so
+                // its centipawns go through the human-calibrated curve instead,
+                // as Lichess does. Otherwise a one-pawn slip reads as a blunder.
+                let options: Vec<(String, String)> = config.options.iter().map(|o| (o.name.clone(), o.value.clone())).collect();
                 Ok(EngineLaunch { key: format!("{path:?}{options:?}"), path, options })
             }
         }

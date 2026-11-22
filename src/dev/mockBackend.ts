@@ -55,7 +55,7 @@ function toAppError(e: unknown): ErrorPayload {
 }
 
 /** Counters and knobs the e2e tests read through `window.__GRANDIE_MOCK_STATS__`. */
-const mockStats = { reviewStarts: 0, reviewPlyMs: 15, engineReplyMs: 150 };
+const mockStats = { reviewStarts: 0, reviewPlyMs: 15, engineReplyMs: 150, uiErrors: [] as string[] };
 const runningReviews = new Map<string, { cancelled: boolean }>();
 
 function load(fen: string): Chess {
@@ -329,6 +329,10 @@ function parsePgn(text: string): { games: GameTree[]; errors: string[] } {
 export type Handler = (args: Record<string, unknown>) => unknown;
 
 const handlers: Record<string, Handler> = {
+  app_log_error: (a) => {
+    mockStats.uiErrors.push(`${a.context as string}: ${a.message as string}`);
+    return null;
+  },
   app_info: () => ({ version: "0.1.0", arch: "x86_64", lc0Path: "/mock/lc0", dataDir: "/mock", networksDir: "/mock/networks", pgnDir: "/mock/pgn" }),
   chess_position_info: (a) => info(load(a.fen as string)),
   chess_apply_move: (a) => apply(a.fen as string, a.uci as string),
@@ -785,7 +789,7 @@ Object.assign(handlers, {
   explorer_lichess: () => {
     throw "Add a Lichess API token in Settings to use the Lichess explorer.";
   },
-  lichess_token_status: () => false,
+  lichess_token_status: () => ({ own: false, builtIn: false }),
   lichess_token_set: () => null,
   file_read_text: () => "1. e4 e5 2. Nf3 *",
   repertoire_moves: (a: Record<string, unknown>) => repMoves.filter((m) => m.color === a.color).map(({ color: _c, ...m }) => m),
