@@ -32,6 +32,9 @@ export function PlayScreen({ sessionId }: { sessionId: number }) {
   const coachBoard = useCoachBoard(coachOwner);
   const coachMode = usePlay((s) => s.coachModes[sessionId] ?? "off");
   const [verdict, setVerdict] = useState<{ verdict: CoachVerdict; san: string } | null>(null);
+  // Bumped by every coach check and takeback: a verdict that arrives after
+  // the move was taken back (or after a newer move) is dropped.
+  const coachCheckId = useRef(0);
 
   useEffect(() => {
     if (!snap) {
@@ -161,9 +164,11 @@ export function PlayScreen({ sessionId }: { sessionId: number }) {
   /** The coach looks at the move just played; mistakes are shown on the board. */
   async function coachCheck(fenBefore: string, lastMoveBefore: string | null, uci: string, san: string) {
     const coach = useCoach.getState();
+    const id = ++coachCheckId.current;
     setVerdict(null);
     coach.setLoading(coachOwner, `Looking at ${san}…`);
     const r = await commands.coachCheckMove(fenBefore, uci, lastMoveBefore, coachMode === "every", null);
+    if (id !== coachCheckId.current) return;
     coach.setLoading(coachOwner, null);
     if (r.status === "error") {
       notifyError("The coach couldn't check the move", r.error);
@@ -207,6 +212,8 @@ export function PlayScreen({ sessionId }: { sessionId: number }) {
   }
 
   async function takeback() {
+    coachCheckId.current++;
+    useCoach.getState().setLoading(coachOwner, null);
     useCoach.getState().stop();
     setVerdict(null);
     const s = await tryCommand(commands.playTakeback(sessionId), "Takeback refused");

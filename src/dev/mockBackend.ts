@@ -55,7 +55,7 @@ function toAppError(e: unknown): ErrorPayload {
 }
 
 /** Counters and knobs the e2e tests read through `window.__GRANDIE_MOCK_STATS__`. */
-const mockStats = { reviewStarts: 0, reviewPlyMs: 15 };
+const mockStats = { reviewStarts: 0, reviewPlyMs: 15, engineReplyMs: 150 };
 const runningReviews = new Map<string, { cancelled: boolean }>();
 
 function load(fen: string): Chess {
@@ -167,6 +167,8 @@ function readMockSettings(): Partial<Settings> {
 interface MockSession {
   snap: PlaySnapshot;
   clock: { white: number; black: number; running: Side | null; since: number } | null;
+  /** Bumped by a takeback so a reply the engine was still "thinking" about is dropped. */
+  generation: number;
 }
 
 const sessions = new Map<number, MockSession>();
@@ -235,12 +237,13 @@ function engineTurn(s: MockSession) {
   s.snap = { ...s.snap, engineThinking: true };
   refresh(s);
   emitPlay(s);
+  const generation = s.generation;
   setTimeout(() => {
-    if (s.snap.outcome) return;
+    if (s.snap.outcome || s.generation !== generation) return;
     s.snap = { ...s.snap, engineThinking: false };
     pushMove(s, firstMove(s.snap.position.fen));
     emitPlay(s);
-  }, 150);
+  }, mockStats.engineReplyMs);
 }
 
 function startGame(setup: PlaySetup): PlaySnapshot {
@@ -272,6 +275,7 @@ function startGame(setup: PlaySetup): PlaySnapshot {
       error: null,
     },
     clock: setup.timeControl ? { white: setup.timeControl.initialMs, black: setup.timeControl.initialMs, running: null, since: Date.now() } : null,
+    generation: 0,
   };
   sessions.set(s.snap.sessionId, s);
   refresh(s);
@@ -376,10 +380,27 @@ const handlers: Record<string, Handler> = {
     return s.snap;
   },
   play_takeback: (a) => {
+    // As the Rust session does: cancel a reply the engine is still working
+    // on, then remove moves back to (and including) the user's last one.
     const s = session(a.sessionId as number);
-    const moves = s.snap.moves.slice(0, s.snap.moves.length - (s.snap.position.turn === s.snap.userSide ? 2 : 1));
-    s.snap = { ...s.snap, moves, position: info(load(moves.length ? moves[moves.length - 1].fen : s.snap.startFen)), lastMove: moves[moves.length - 1]?.uci ?? null };
+    if (s.snap.outcome) throw "the game is over";
+    const first: Side = load(s.snap.startFen).turn;
+    const moverOf = (i: number): Side => (i % 2 === 0 ? first : first === "white" ? "black" : "white");
+    const moves = [...s.snap.moves];
+    if (!moves.some((_, i) => moverOf(i) === s.snap.userSide)) throw "nothing to take back";
+    while (moves.length && moverOf(moves.length - 1) !== s.snap.userSide) moves.pop();
+    moves.pop();
+    s.generation += 1;
+    s.snap = {
+      ...s.snap,
+      moves,
+      engineThinking: false,
+      hint: null,
+      position: info(load(moves.length ? moves[moves.length - 1].fen : s.snap.startFen)),
+      lastMove: moves[moves.length - 1]?.uci ?? null,
+    };
     refresh(s);
+    emitPlay(s);
     return s.snap;
   },
   play_resign: (a) => {

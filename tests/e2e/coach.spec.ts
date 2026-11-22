@@ -53,14 +53,23 @@ test("in a coached game a mistake is shown and can be taken back", async ({ page
   await page.locator("main").getByRole("button", { name: "Play", exact: true }).click();
   await expect(page.getByText("Your move")).toBeVisible();
 
+  // The engine is slow to reply, so the takeback lands while it is still
+  // thinking: the reply must be dropped and the turn given back.
+  await page.evaluate(() => {
+    (window as unknown as { __GRANDIE_MOCK_STATS__: { engineReplyMs: number } }).__GRANDIE_MOCK_STATS__.engineReplyMs = 1500;
+  });
   // The mock counts moves to the a- and h-files as mistakes.
   await dragMove(page, "h2", "h4");
   const verdict = page.getByLabel("Coach verdict");
   await expect(verdict).toContainText("mistake");
   await expect(page.getByLabel("Conversation with the coach")).toContainText("is a mistake");
+  await expect(page.getByText(/is thinking/)).toBeVisible();
   await verdict.getByRole("button", { name: "Take back and try again" }).click();
   await expect(page.getByText("Your move")).toBeVisible();
   await expect(verdict).toHaveCount(0);
+  // Well after the dropped reply would have come, it is still the user's move.
+  await page.waitForTimeout(1800);
+  await expect(page.getByText("Your move")).toBeVisible();
 });
 
 test("asking the coach streams an answer and shows a line", async ({ page }) => {
